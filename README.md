@@ -32,7 +32,7 @@ Prérequis
 Installation
 
 1.	Clonez le dépôt GitHub :
-   git clone https://github.com/votre-utilisateur/cleanmyplex.git
+   git clone https://github.com/votre-utilisateur/cleanmyplex.git /opt/cleanmyplex
    cd cleanmyplex
 
 2.	Créez un environnement virtuel et activez-le :
@@ -60,6 +60,14 @@ Installation
     "INCLUDE_UNRATED": true
    }
 
+5.	Créer un Utilisateur Basique Sans Home Directory ni Password :
+   sudo useradd -r -s /usr/sbin/nologin cleanmyplex
+
+6.	Changer le Propriétaire du Répertoire du Projet :
+   sudo chown -R cleanmyplex:cleanmyplex /opt/cleanmyplex
+
+
+
 Scripts Systemd
 
 Pour exécuter l’application automatiquement au démarrage, créez un script systemd :
@@ -68,18 +76,20 @@ Pour exécuter l’application automatiquement au démarrage, créez un script s
    sudo nano /etc/systemd/system/cleanmyplex.service
 
 2.	Ajoutez le contenu suivant :
-   [Unit]
-   Description=CleanMyPlex Service
-   After=network.target
 
-   [Service]
-   User=your_username
-   WorkingDirectory=/home/your_username/cleanmyplex
-   ExecStart=/bin/bash -c 'source /home/your_username/cleanmyplex/plex_env/bin/activate && python3 /home/your_username/cleanmyplex/cleanmyplex.py'
-   Restart=always
+[Unit]
+Description=CleanMyPlex Service
+After=network.target
 
-   [Install]
-   WantedBy=multi-user.target
+[Service]
+User=cleanmyplex
+WorkingDirectory=/opt/cleanmyplex
+ExecStart=/bin/bash -c 'source /opt/cleanmyplex/plex_env/bin/activate && exec python3 /opt/cleanmyplex/cleanmyplex.py'
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+
 
 3.	Rechargez systemd, activez et démarrez le service :
    sudo systemctl daemon-reload
