@@ -72,8 +72,6 @@ CleanMyPlex est une application web permettant de gérer et nettoyer vos bibliot
    ```sh
    sudo chown -R cleanmyplex:cleanmyplex /opt/cleanmyplex
 
-
-
 Scripts Systemd
 
 Pour exécuter l’application automatiquement au démarrage, créez un script systemd :
@@ -104,8 +102,6 @@ Pour exécuter l’application automatiquement au démarrage, créez un script s
    sudo systemctl daemon-reload
    sudo systemctl enable cleanmyplex.service
    sudo systemctl start cleanmyplex.service
-
-
 
 Contribution
 
