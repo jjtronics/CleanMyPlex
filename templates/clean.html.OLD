@@ -19,16 +19,18 @@
     <div class="list-group">
         {% if films_csv_exists %}
             <div class="d-flex justify-content-between align-items-center">
-                <a href="{{ url_for('view_existing_csv', library='films') }}" class="list-group-item list-group-item-action">Voir CSV des films</a>
-                <form action="{{ url_for('delete_csv', csv_file=CSV_FILE_FILMS) }}" method="post" style="display: inline;">
+                <a href="{{ url_for('view_existing_csv', library='films') }}" class="list-group-item list-group-item-action flex-grow-1">Voir CSV des films</a>
+                <form action="{{ url_for('delete_csv') }}" method="post" style="display: inline;">
+                    <input type="hidden" name="csv_file" value="unwatched_movies.csv">
                     <button type="submit" class="btn btn-danger btn-sm">🗑️</button>
                 </form>
             </div>
         {% endif %}
         {% if series_csv_exists %}
             <div class="d-flex justify-content-between align-items-center">
-                <a href="{{ url_for('view_existing_csv', library='series') }}" class="list-group-item list-group-item-action">Voir CSV des séries</a>
-                <form action="{{ url_for('delete_csv', csv_file=CSV_FILE_SERIES) }}" method="post" style="display: inline;">
+                <a href="{{ url_for('view_existing_csv', library='series') }}" class="list-group-item list-group-item-action flex-grow-1">Voir CSV des séries</a>
+                <form action="{{ url_for('delete_csv') }}" method="post" style="display: inline;">
+                    <input type="hidden" name="csv_file" value="unwatched_series.csv">
                     <button type="submit" class="btn btn-danger btn-sm">🗑️</button>
                 </form>
             </div>

@@ -199,14 +199,27 @@ def index():
     common_series_csv_exists = os.path.exists(CSV_FILE_COMMON_SERIES)
     return render_template('index.html', films_csv_exists=films_csv_exists, series_csv_exists=series_csv_exists, common_movies_csv_exists=common_movies_csv_exists, common_series_csv_exists=common_series_csv_exists)
 
-@app.route('/delete_csv/<csv_file>', methods=['POST'])
-def delete_csv(csv_file):
-    file_path = os.path.join(os.getcwd(), csv_file)
-    if os.path.exists(file_path):
-        os.remove(file_path)
-        flash(f"Fichier {csv_file} supprimé avec succès.", 'success')
+@app.route('/delete_csv', methods=['POST'])
+def delete_csv():
+    csv_file = request.form.get('csv_file')
+    print(f"Received request to delete file: {csv_file}")  # Debug statement
+    if not csv_file:
+        flash(f"Aucun fichier spécifié pour la suppression.", 'danger')
+        return redirect(url_for('index'))
+
+    valid_files = [CSV_FILE_FILMS, CSV_FILE_SERIES, CSV_FILE_COMMON_MOVIES, CSV_FILE_COMMON_SERIES]
+    if csv_file in valid_files:
+        file_path = os.path.join(os.getcwd(), csv_file)
+        print(f"Attempting to delete file at path: {file_path}")  # Debug statement
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+            flash(f"Fichier {csv_file} supprimé avec succès.", 'success')
+        else:
+            print(f"File not found: {file_path}")  # Debug statement
+            flash(f"Le fichier {csv_file} n'existe pas.", 'danger')
     else:
-        flash(f"Le fichier {csv_file} n'existe pas.", 'danger')
+        print(f"Invalid file specified: {csv_file}")  # Debug statement
+        flash(f"Le fichier {csv_file} spécifié est invalide.", 'danger')
     return redirect(url_for('index'))
 
 @app.route('/clean', methods=['GET', 'POST'])

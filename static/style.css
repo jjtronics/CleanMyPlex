@@ -213,3 +213,34 @@ table thead th {
 table tbody + tbody {
     border-top: 2px solid #dee2e6;
 }
+
+
+form.inline-form {
+    display: inline;
+    margin: 0;
+}
+
+.btn-sm {
+    white-space: nowrap;
+}
+
+
+.inline-form {
+    display: flex;
+    align-items: center;
+    margin: 0;
+}
+
+.inline-form button {
+    margin-left: 10px;
+}
+
+/* Styles pour les liens dans la list-group */
+.list-group-item a {
+    color: #212529; /* Couleur sombre pour le texte */
+}
+
+.list-group-item a:hover {
+    color: #0056b3; /* Couleur au survol, similaire à un lien standard */
+    text-decoration: underline; /* Ajoute un soulignement au survol */
+}
