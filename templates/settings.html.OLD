@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block title %}Paramètres{% endblock %}
+
+{% block header_title %}Paramètres{% endblock %}
+
+{% block content %}
+    <form method="post">
+        <div class="form-group">
+            <label for="PLEX_URL">Plex URL:</label>
+            <input type="text" class="form-control" id="PLEX_URL" name="PLEX_URL" value="{{ config.PLEX_URL }}" required>
+        </div>
+        <div class="form-group">
+            <label for="PLEX_TOKEN">Plex Token:</label>
+            <input type="text" class="form-control" id="PLEX_TOKEN" name="PLEX_TOKEN" value="{{ config.PLEX_TOKEN }}" required>
+        </div>
+        <div class="form-group">
+            <label for="PLEX_USERNAME">Plex Username:</label>
+            <input type="text" class="form-control" id="PLEX_USERNAME" name="PLEX_USERNAME" value="{{ config.PLEX_USERNAME }}" required>
+        </div>
+        <div class="form-group">
+            <label for="PLEX_PASSWORD">Plex Password:</label>
+            <input type="password" class="form-control" id="PLEX_PASSWORD" name="PLEX_PASSWORD" value="{{ config.PLEX_PASSWORD }}" required>
+        </div>
+        <div class="form-group">
+            <label for="FRIEND_SERVER_NAME">Nom du serveur Plex de l'ami:</label>
+            <input type="text" class="form-control" id="FRIEND_SERVER_NAME" name="FRIEND_SERVER_NAME" value="{{ config.FRIEND_SERVER_NAME }}" required>
+        </div>
+        <div class="form-group">
+            <label for="FRIEND_LIBRARY_NAME_FILMS">Nom de la bibliothèque des films de l'ami:</label>
+            <input type="text" class="form-control" id="FRIEND_LIBRARY_NAME_FILMS" name="FRIEND_LIBRARY_NAME_FILMS" value="{{ config.FRIEND_LIBRARY_NAME_FILMS }}" required>
+        </div>
+        <div class="form-group">
+            <label for="FRIEND_LIBRARY_NAME_SERIES">Nom de la bibliothèque des séries de l'ami:</label>
+            <input type="text" class="form-control" id="FRIEND_LIBRARY_NAME_SERIES" name="FRIEND_LIBRARY_NAME_SERIES" value="{{ config.FRIEND_LIBRARY_NAME_SERIES }}" required>
+        </div>
+        <div class="form-group">
+            <label for="FILM_LIBRARY_NAME">Nom de votre bibliothèque des films:</label>
+            <input type="text" class="form-control" id="FILM_LIBRARY_NAME" name="FILM_LIBRARY_NAME" value="{{ config.FILM_LIBRARY_NAME }}" required>
+        </div>
+        <div class="form-group">
+            <label for="SERIES_LIBRARY_NAME">Nom de votre bibliothèque des séries:</label>
+            <input type="text" class="form-control" id="SERIES_LIBRARY_NAME" name="SERIES_LIBRARY_NAME" value="{{ config.SERIES_LIBRARY_NAME }}" required>
+        </div>
+        <div class="form-group">
+            <label for="LOG_FILE_PATH">Chemin du fichier de log:</label>
+            <input type="text" class="form-control" id="LOG_FILE_PATH" name="LOG_FILE_PATH" value="{{ config.LOG_FILE_PATH }}" required>
+        </div>
+        <div class="form-group">
+            <label for="DAYS_TO_IGNORE">Nombre de jours à ignorer:</label>
+            <input type="number" class="form-control" id="DAYS_TO_IGNORE" name="DAYS_TO_IGNORE" value="{{ config.DAYS_TO_IGNORE }}" required>
+        </div>
+        <div class="form-group">
+            <label for="RELEASE_DATE_LIMIT">Limite de date de sortie:</label>
+            <input type="date" class="form-control" id="RELEASE_DATE_LIMIT" name="RELEASE_DATE_LIMIT" value="{{ config.RELEASE_DATE_LIMIT }}" required>
+        </div>
+        <div class="form-group">
+            <label for="RATING_LIMIT">Limite de note:</label>
+            <input type="number" step="0.1" class="form-control" id="RATING_LIMIT" name="RATING_LIMIT" value="{{ config.RATING_LIMIT }}" required>
+        </div>
+        <div class="form-group">
+            <label for="INCLUDE_UNRATED">Inclure les non notés:</label>
+            <input type="checkbox" class="form-control" id="INCLUDE_UNRATED" name="INCLUDE_UNRATED" {% if config.INCLUDE_UNRATED %}checked{% endif %}>
+        </div>
+        <button type="submit" class="btn btn-primary">Mettre à jour les paramètres</button>
+    </form>
+    <div class="button-container">
+        <a href="{{ url_for('index') }}" class="btn-action btn-back">Retour</a>
+    </div>
+{% endblock %}

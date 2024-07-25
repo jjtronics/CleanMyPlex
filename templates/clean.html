@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Nettoyage de vos films/séries{% endblock %}
+
+{% block header_title %}Nettoyage de vos films/séries{% endblock %}
+
+{% block content %}
+    <form method="post">
+        <div class="form-group">
+            <label for="library">Choisissez une bibliothèque :</label>
+            <select class="form-control" id="library" name="library">
+                <option value="films">Films</option>
+                <option value="series">Séries</option>
+            </select>
+        </div>
+        <button type="submit" class="btn btn-primary">Générer CSV</button>
+    </form>
+    <h2 class="my-4">CSV existants</h2>
+    <div class="list-group">
+        {% if films_csv_exists %}
+            <div class="d-flex justify-content-between align-items-center">
+                <a href="{{ url_for('view_existing_csv', library='films') }}" class="list-group-item list-group-item-action flex-grow-1">Voir CSV des films</a>
+                <form action="{{ url_for('delete_csv', csv_file=CSV_FILE_FILMS) }}" method="post" style="display: inline;">
+                    <button type="submit" class="btn btn-danger btn-sm">🗑️</button>
+                </form>
+            </div>
+        {% endif %}
+        {% if series_csv_exists %}
+            <div class="d-flex justify-content-between align-items-center">
+                <a href="{{ url_for('view_existing_csv', library='series') }}" class="list-group-item list-group-item-action flex-grow-1">Voir CSV des séries</a>
+                <form action="{{ url_for('delete_csv', csv_file=CSV_FILE_SERIES) }}" method="post" style="display: inline;">
+                    <button type="submit" class="btn btn-danger btn-sm">🗑️</button>
+                </form>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block title %}CSV - {{ csv_file }}{% endblock %}
+
+{% block content %}
+    <h2>CSV - {{ csv_file }}</h2>
+    <div class="table-container">
+        <form method="post">
+            <table id="csvTable" class="table table-bordered">
+                <thead>
+                    <tr>
+                        {% for title in titles %}
+                            <th>{{ title }}</th>
+                        {% endfor %}
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for index, row in df.iterrows() %}
+                        <tr>
+                            {% for title in titles %}
+                                <td>
+                                    {% if title == 'title' %}
+                                        <a href="https://www.google.com/search?q={{ 'film' if 'unwatched_movies' in csv_file or 'common_movies' in csv_file else 'série' }}+{{ row[title] }}" target="_blank">{{ row[title] }}</a>
+                                    {% else %}
+                                        {{ row[title] }}
+                                    {% endif %}
+                                </td>
+                            {% endfor %}
+                            <td class="action-buttons">
+                                <button type="submit" name="action_{{ index }}" value="A" class="btn-action btn-archive">A</button>
+                                <button type="submit" name="action_{{ index }}" value="D" class="btn-action btn-delete">D</button>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </form>
+    </div>
+    <a href="{{ url_for('download_csv', csv_file=csv_file) }}" class="btn btn-primary">Télécharger le CSV</a>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function() {
+        $('#csvTable').DataTable({
+            "paging": true,
+            "searching": true,
+            "ordering": true,
+        });
+    });
+</script>
+{% endblock %}

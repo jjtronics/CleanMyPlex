@@ -1,0 +1,16 @@
+{
+    "PLEX_URL": "http://127.0.0.1:32400",
+    "PLEX_TOKEN": "aZ5dYytyZVQ7nn22EemG",
+    "PLEX_USERNAME": "jj@jjtronics.com",
+    "PLEX_PASSWORD": "v2t8me50",
+    "FRIEND_SERVER_NAME": "PlexVM",
+    "FRIEND_LIBRARY_NAME_FILMS": "Films",
+    "FRIEND_LIBRARY_NAME_SERIES": "S\u00e9ries TV",
+    "FILM_LIBRARY_NAME": "Films",
+    "SERIES_LIBRARY_NAME": "S\u00e9ries TV",
+    "LOG_FILE_PATH": "/var/lib/plexmediaserver/Library/Application Support/Plex Media Server/Logs/Plex Media Server.log",
+    "DAYS_TO_IGNORE": 30,
+    "RELEASE_DATE_LIMIT": "2024-01-01",
+    "RATING_LIMIT": 4.0,
+    "INCLUDE_UNRATED": true
+}
