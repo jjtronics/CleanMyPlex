@@ -46,6 +46,7 @@ CleanMyPlex est une application web permettant de gérer et nettoyer vos bibliot
    pip install -r requirements.txt
 
 4. Créer et Configurez les paramètres dans `config.json` :
+   Pour récupérer votre token vous pouvez suivre la doc : https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/
    ```json
    {
     "PLEX_URL": "http://127.0.0.1:32400",
