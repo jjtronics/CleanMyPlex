@@ -47,7 +47,7 @@ CleanMyPlex est une application web Python conçue pour gérer et nettoyer vos b
    ```bash
    pip install -r requirements.txt
 
-4. Configurez les paramètres dans `config.json` :
+4. Créer et Configurez les paramètres dans `config.json` :
    ```json
    {
     "PLEX_URL": "http://127.0.0.1:32400",
