@@ -2,8 +2,6 @@
 
 {% block title %}Doublons{% endblock %}
 
-{% block header_title %}Doublons{% endblock %}
-
 {% block content %}
     <form method="post">
         <div class="form-group">
@@ -15,11 +13,15 @@
         </div>
         <button type="submit" class="btn btn-primary">Comparer</button>
     </form>
+
     <h2 class="my-4">CSV des doublons existants</h2>
     <div class="list-group">
         {% if common_movies_csv_exists %}
             <div class="list-group-item d-flex justify-content-between align-items-center mb-2">
-                <a href="{{ url_for('view_existing_csv', library='common_movies') }}" class="text-dark flex-grow-1">Voir CSV des films en doublon</a>
+                <div class="d-flex align-items-center flex-grow-1">
+                    <a href="{{ url_for('view_existing_csv', library='common_movies') }}" class="text-dark">Voir CSV des films en doublon</a>
+                    <small class="text-muted ml-2">(Dernière modification : {{ common_movies_csv_mtime }})</small>
+                </div>
                 <form action="{{ url_for('delete_csv') }}" method="post" class="inline-form mb-0">
                     <input type="hidden" name="csv_file" value="common_movies.csv">
                     <button type="submit" class="btn btn-danger btn-sm">🗑️</button>
@@ -28,7 +30,10 @@
         {% endif %}
         {% if common_series_csv_exists %}
             <div class="list-group-item d-flex justify-content-between align-items-center mb-2">
-                <a href="{{ url_for('view_existing_csv', library='common_series') }}" class="text-dark flex-grow-1">Voir CSV des séries en doublon</a>
+                <div class="d-flex align-items-center flex-grow-1">
+                    <a href="{{ url_for('view_existing_csv', library='common_series') }}" class="text-dark">Voir CSV des séries en doublon</a>
+                    <small class="text-muted ml-2">(Dernière modification : {{ common_series_csv_mtime }})</small>
+                </div>
                 <form action="{{ url_for('delete_csv') }}" method="post" class="inline-form mb-0">
                     <input type="hidden" name="csv_file" value="common_series.csv">
                     <button type="submit" class="btn btn-danger btn-sm">🗑️</button>

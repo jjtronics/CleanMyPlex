@@ -17,7 +17,7 @@
                     <tr>
                         <th></th>
                         {% for title in titles %}
-                            {% if title in ["rating", "plex_rating", "file_size"] %}
+                            {% if title in ["rating", "plex_rating", "file_size", "local_file_size", "remote_file_size", "largest_file_size"] %}
                                 <th>
                                     <input type="text" id="filter_{{ title }}" placeholder="Filtrer {{ title }}" class="column-filter">
                                 </th>
@@ -42,7 +42,11 @@
                                             {{ row[title] }}
                                         </a>
                                     {% else %}
-                                        {{ row[title] }}
+                                        {% if row[title] == '' or row[title] == 'N/A' %}
+                                            N/A
+                                        {% else %}
+                                            {{ row[title] }}
+                                        {% endif %}
                                     {% endif %}
                                 </td>
                             {% endfor %}
@@ -53,11 +57,20 @@
         </div>
 
         <!-- Boutons pour définir l'action sur les lignes sélectionnées -->
-        <div class="action-buttons">
-            <button type="button" id="set_selected_a" class="btn btn-secondary">Définir les sélectionnés en archive</button>
-            <button type="button" id="set_selected_d" class="btn btn-secondary">Définir les sélectionnés en suppression</button>
-            <button type="submit" class="btn btn-primary">Enregistrer les modifications</button>
-        </div>
+        {% if csv_file in ['common_movies.csv', 'common_series.csv'] %}
+            <!-- Affichage pour les CSV de comparaison des doublons -->
+            <div class="action-buttons">
+                <button type="button" id="set_selected_d" class="btn btn-secondary">Définir les sélectionnés en suppression local</button>
+                <button type="submit" class="btn btn-primary">Enregistrer les modifications</button>
+            </div>
+        {% else %}
+            <!-- Affichage pour les autres CSV -->
+            <div class="action-buttons">
+                <button type="button" id="set_selected_a" class="btn btn-secondary">Définir les sélectionnés en archive</button>
+                <button type="button" id="set_selected_d" class="btn btn-secondary">Définir les sélectionnés en suppression</button>
+                <button type="submit" class="btn btn-primary">Enregistrer les modifications</button>
+            </div>
+        {% endif %}
     </form>
 
     <!-- Boutons "Télécharger le CSV" et "Traiter le CSV" -->
@@ -98,122 +111,73 @@
             return null;
         }
 
+        // Obtenir les indices des colonnes par nom
+        var columnIndices = {};
+        $('#csvTable thead tr:eq(0) th').each(function(index) {
+            var columnName = $(this).text();
+            if (columnName) {
+                columnIndices[columnName] = index;
+            }
+        });
+
         // Filtre personnalisé pour les colonnes numériques et dates
         $.fn.dataTable.ext.search.push(
             function(settings, data, dataIndex) {
-                // Ajustement des indices des colonnes
-                // data[1]: title
-                // data[2]: rating
-                // data[3]: plex_rating
-                // data[4]: key
-                // data[5]: added_at
-                // data[6]: release_date
-                // data[7]: file_size
-                // data[8]: server
-                // data[9]: Action
+                // Filtrage dynamique basé sur les colonnes disponibles
+                var filters = [
+                    { id: 'rating', type: 'number' },
+                    { id: 'plex_rating', type: 'number' },
+                    { id: 'file_size', type: 'number' },
+                    { id: 'local_file_size', type: 'number' },
+                    { id: 'remote_file_size', type: 'number' },
+                    { id: 'largest_file_size', type: 'number' },
+                    { id: 'added_at', type: 'date' },
+                    { id: 'release_date', type: 'date' }
+                ];
 
-                // 1. Filtrage sur la colonne "rating"
-                var filterRating = $('#filter_rating').val();
-                var rating = parseFloat(data[2].replace(',', '.')) || 0;
+                for (var i = 0; i < filters.length; i++) {
+                    var filter = filters[i];
+                    var filterValue = $('#filter_' + filter.id).val();
+                    if (filterValue && columnIndices[filter.id] !== undefined) {
+                        var dataValue = data[columnIndices[filter.id]];
 
-                if (filterRating) {
-                    var filter = parseFilterValue(filterRating);
-                    var filterValue = parseFloat(filter.value);
-                    if (!isNaN(filterValue)) {
-                        switch (filter.operator) {
-                            case '>': if (!(rating > filterValue)) return false; break;
-                            case '>=': if (!(rating >= filterValue)) return false; break;
-                            case '<': if (!(rating < filterValue)) return false; break;
-                            case '<=': if (!(rating <= filterValue)) return false; break;
-                            default: if (rating != filterValue) return false; break;
-                        }
-                    }
-                }
-
-                // 2. Filtrage sur la colonne "plex_rating"
-                var filterPlexRating = $('#filter_plex_rating').val();
-                var plexRating = parseFloat(data[3].replace(',', '.')) || 0;
-
-                if (filterPlexRating) {
-                    var filterPlex = parseFilterValue(filterPlexRating);
-                    var filterValuePlex = parseFloat(filterPlex.value);
-                    if (!isNaN(filterValuePlex)) {
-                        switch (filterPlex.operator) {
-                            case '>': if (!(plexRating > filterValuePlex)) return false; break;
-                            case '>=': if (!(plexRating >= filterValuePlex)) return false; break;
-                            case '<': if (!(plexRating < filterValuePlex)) return false; break;
-                            case '<=': if (!(plexRating <= filterValuePlex)) return false; break;
-                            default: if (plexRating != filterValuePlex) return false; break;
-                        }
-                    }
-                }
-
-                // 3. Filtrage sur la colonne "file_size"
-                var filterFileSize = $('#filter_file_size').val();
-                var fileSize = parseFloat(data[7].replace(' Go', '').replace(',', '.')) || 0;
-
-                if (filterFileSize) {
-                    var filterFile = parseFilterValue(filterFileSize);
-                    var filterValueFile = parseFloat(filterFile.value);
-                    if (!isNaN(filterValueFile)) {
-                        switch (filterFile.operator) {
-                            case '>': if (!(fileSize > filterValueFile)) return false; break;
-                            case '>=': if (!(fileSize >= filterValueFile)) return false; break;
-                            case '<': if (!(fileSize < filterValueFile)) return false; break;
-                            case '<=': if (!(fileSize <= filterValueFile)) return false; break;
-                            default: if (fileSize != filterValueFile) return false; break;
-                        }
-                    }
-                }
-
-                // 4. Filtrage sur la colonne "added_at"
-                var filterAddedAt = $('#filter_added_at').val();
-                var addedAtStr = data[5];
-                var addedAt = parseDate(addedAtStr);
-
-                if (filterAddedAt) {
-                    var filterAdded = parseFilterValue(filterAddedAt);
-                    var filterDateAdded = parseDate(filterAdded.value);
-                    if (filterDateAdded && addedAt) {
-                        if (!isNaN(addedAt.getTime())) {
-                            switch (filterAdded.operator) {
-                                case '>': if (!(addedAt.getTime() > filterDateAdded.getTime())) return false; break;
-                                case '>=': if (!(addedAt.getTime() >= filterDateAdded.getTime())) return false; break;
-                                case '<': if (!(addedAt.getTime() < filterDateAdded.getTime())) return false; break;
-                                case '<=': if (!(addedAt.getTime() <= filterDateAdded.getTime())) return false; break;
-                                default: if (addedAt.getTime() !== filterDateAdded.getTime()) return false; break;
+                        if (filter.type === 'number') {
+                            var numericValue = parseFloat(dataValue.replace(' Go', '').replace(',', '.')) || 0;
+                            var filterParsed = parseFilterValue(filterValue);
+                            var filterNumeric = parseFloat(filterParsed.value);
+                            if (!isNaN(filterNumeric)) {
+                                switch (filterParsed.operator) {
+                                    case '>': if (!(numericValue > filterNumeric)) return false; break;
+                                    case '>=': if (!(numericValue >= filterNumeric)) return false; break;
+                                    case '<': if (!(numericValue < filterNumeric)) return false; break;
+                                    case '<=': if (!(numericValue <= filterNumeric)) return false; break;
+                                    default: if (numericValue != filterNumeric) return false; break;
+                                }
+                            }
+                        } else if (filter.type === 'date') {
+                            var dateValue = parseDate(dataValue);
+                            var filterParsed = parseFilterValue(filterValue);
+                            var filterDate = parseDate(filterParsed.value);
+                            if (filterDate && dateValue) {
+                                if (!isNaN(dateValue.getTime())) {
+                                    switch (filterParsed.operator) {
+                                        case '>': if (!(dateValue.getTime() > filterDate.getTime())) return false; break;
+                                        case '>=': if (!(dateValue.getTime() >= filterDate.getTime())) return false; break;
+                                        case '<': if (!(dateValue.getTime() < filterDate.getTime())) return false; break;
+                                        case '<=': if (!(dateValue.getTime() <= filterDate.getTime())) return false; break;
+                                        default: if (dateValue.getTime() !== filterDate.getTime()) return false; break;
+                                    }
+                                }
                             }
                         }
                     }
                 }
-
-                // 5. Filtrage sur la colonne "release_date"
-                var filterReleaseDate = $('#filter_release_date').val();
-                var releaseDateStr = data[6];
-                var releaseDate = parseDate(releaseDateStr);
-
-                if (filterReleaseDate) {
-                    var filterRelease = parseFilterValue(filterReleaseDate);
-                    var filterDateRelease = parseDate(filterRelease.value);
-                    if (filterDateRelease && releaseDate) {
-                        if (!isNaN(releaseDate.getTime())) {
-                            switch (filterRelease.operator) {
-                                case '>': if (!(releaseDate.getTime() > filterDateRelease.getTime())) return false; break;
-                                case '>=': if (!(releaseDate.getTime() >= filterDateRelease.getTime())) return false; break;
-                                case '<': if (!(releaseDate.getTime() < filterDateRelease.getTime())) return false; break;
-                                case '<=': if (!(releaseDate.getTime() <= filterDateRelease.getTime())) return false; break;
-                                default: if (releaseDate.getTime() !== filterDateRelease.getTime()) return false; break;
-                            }
-                        }
-                    }
-                }
-
                 return true;
             }
         );
 
         // Appliquer le filtre lorsque les champs changent
-        $('#filter_rating, #filter_plex_rating, #filter_file_size, #filter_added_at, #filter_release_date').on('keyup change', function() {
+        $('.column-filter').on('keyup change', function() {
             table.draw();
         });
 
@@ -234,13 +198,20 @@
         });
 
         // Définir l'action sur les lignes sélectionnées
-        $('#set_selected_a').on('click', function() {
-            setActionOnSelectedRows('A');
-        });
-
-        $('#set_selected_d').on('click', function() {
-            setActionOnSelectedRows('D');
-        });
+        {% if csv_file in ['common_movies.csv', 'common_series.csv'] %}
+            // Pour les doublons, uniquement la suppression locale
+            $('#set_selected_d').on('click', function() {
+                setActionOnSelectedRows('D');
+            });
+        {% else %}
+            // Pour les autres CSV, archive et suppression
+            $('#set_selected_a').on('click', function() {
+                setActionOnSelectedRows('A');
+            });
+            $('#set_selected_d').on('click', function() {
+                setActionOnSelectedRows('D');
+            });
+        {% endif %}
 
         function setActionOnSelectedRows(action) {
             var rows = table.rows({ 'search': 'applied' }).nodes();
@@ -254,8 +225,11 @@
                     value: action
                 }).appendTo('#csvForm');
                 // Mettre à jour la colonne "Action" dans le tableau affiché
-                var actionCell = row.find('td').last();
-                actionCell.text(action);
+                var actionCellIndex = columnIndices['Action'];
+                if (actionCellIndex !== undefined) {
+                    var actionCell = row.find('td').eq(actionCellIndex);
+                    actionCell.text(action);
+                }
             });
         }
     });

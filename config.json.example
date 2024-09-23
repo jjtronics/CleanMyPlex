@@ -8,9 +8,5 @@
  "FRIEND_LIBRARY_NAME_SERIES": "FriendSeriesLibrary",
  "FILM_LIBRARY_NAME": "MyFilmsLibrary",
  "SERIES_LIBRARY_NAME": "MySeriesLibrary",
- "LOG_FILE_PATH": "/path/to/plex/logs/Plex Media Server.log",
- "DAYS_TO_IGNORE": 30,
- "RELEASE_DATE_LIMIT": "2023-01-01",
- "RATING_LIMIT": 7.0,
- "INCLUDE_UNRATED": true
+ "LOG_FILE_PATH": "/path/to/plex/logs/Plex Media Server.log"
 }

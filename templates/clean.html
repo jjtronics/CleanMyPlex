@@ -19,8 +19,11 @@
     <div class="list-group">
         {% if films_csv_exists %}
             <div class="list-group-item d-flex justify-content-between align-items-center mb-2">
-                <a href="{{ url_for('view_existing_csv', library='films') }}" class="text-dark flex-grow-1">Voir CSV des films</a>
-                <form action="{{ url_for('delete_csv') }}" method="post" class="inline-form mb-0">
+                <div class="d-flex align-items-center">
+                    <a href="{{ url_for('view_existing_csv', library='films') }}" class="text-dark">Voir CSV des films</a>
+                    <small class="text-muted ml-2">(Dernière modification : {{ films_csv_mtime }})</small>
+                </div>
+                <form action="{{ url_for('delete_csv') }}" method="post" class="mb-0">
                     <input type="hidden" name="csv_file" value="unwatched_movies.csv">
                     <button type="submit" class="btn btn-danger btn-sm">🗑️</button>
                 </form>
@@ -28,8 +31,11 @@
         {% endif %}
         {% if series_csv_exists %}
             <div class="list-group-item d-flex justify-content-between align-items-center mb-2">
-                <a href="{{ url_for('view_existing_csv', library='series') }}" class="text-dark flex-grow-1">Voir CSV des séries</a>
-                <form action="{{ url_for('delete_csv') }}" method="post" class="inline-form mb-0">
+                <div class="d-flex align-items-center">
+                    <a href="{{ url_for('view_existing_csv', library='series') }}" class="text-dark">Voir CSV des séries</a>
+                    <small class="text-muted ml-2">(Dernière modification : {{ series_csv_mtime }})</small>
+                </div>
+                <form action="{{ url_for('delete_csv') }}" method="post" class="mb-0">
                     <input type="hidden" name="csv_file" value="unwatched_series.csv">
                     <button type="submit" class="btn btn-danger btn-sm">🗑️</button>
                 </form>

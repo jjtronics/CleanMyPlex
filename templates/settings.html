@@ -46,22 +46,6 @@
             <label for="LOG_FILE_PATH">Chemin du fichier de log:</label>
             <input type="text" class="form-control" id="LOG_FILE_PATH" name="LOG_FILE_PATH" value="{{ config.LOG_FILE_PATH }}" required>
         </div>
-        <div class="form-group">
-            <label for="DAYS_TO_IGNORE">Nombre de jours à ignorer:</label>
-            <input type="number" class="form-control" id="DAYS_TO_IGNORE" name="DAYS_TO_IGNORE" value="{{ config.DAYS_TO_IGNORE }}" required>
-        </div>
-        <div class="form-group">
-            <label for="RELEASE_DATE_LIMIT">Limite de date de sortie:</label>
-            <input type="date" class="form-control" id="RELEASE_DATE_LIMIT" name="RELEASE_DATE_LIMIT" value="{{ config.RELEASE_DATE_LIMIT }}" required>
-        </div>
-        <div class="form-group">
-            <label for="RATING_LIMIT">Limite de note:</label>
-            <input type="number" step="0.1" class="form-control" id="RATING_LIMIT" name="RATING_LIMIT" value="{{ config.RATING_LIMIT }}" required>
-        </div>
-        <div class="form-group">
-            <label for="INCLUDE_UNRATED">Inclure les non notés:</label>
-            <input type="checkbox" class="form-control" id="INCLUDE_UNRATED" name="INCLUDE_UNRATED" {% if config.INCLUDE_UNRATED %}checked{% endif %}>
-        </div>
         <button type="submit" class="btn btn-primary">Mettre à jour les paramètres</button>
     </form>
 {% endblock %}
