@@ -4,20 +4,37 @@
 
 {% block content %}
     <h2>CSV - {{ csv_file }}</h2>
-    <div class="table-container">
-        <form method="post">
+    <form method="post" id="csvForm">
+        <div class="table-container">
             <table class="table table-bordered" id="csvTable">
                 <thead>
                     <tr>
+                        <th><input type="checkbox" id="select_all"></th>
                         {% for title in titles %}
                             <th>{{ title }}</th>
                         {% endfor %}
-                        <th>Actions</th>
+                    </tr>
+                    <tr>
+                        <th></th>
+                        {% for title in titles %}
+                            {% if title in ["rating", "plex_rating", "file_size"] %}
+                                <th>
+                                    <input type="text" id="filter_{{ title }}" placeholder="Filtrer {{ title }}" class="column-filter">
+                                </th>
+                            {% elif title in ["added_at", "release_date"] %}
+                                <th>
+                                    <input type="text" id="filter_{{ title }}" placeholder="Filtrer {{ title }} (yyyy-mm-dd)" class="column-filter">
+                                </th>
+                            {% else %}
+                                <th><input type="text" placeholder="Filtrer {{ title }}" class="column-filter"></th>
+                            {% endif %}
+                        {% endfor %}
                     </tr>
                 </thead>
                 <tbody>
                     {% for index, row in df.iterrows() %}
                         <tr>
+                            <td><input type="checkbox" class="row-select" name="selected_rows" value="{{ index }}"></td>
                             {% for title in titles %}
                                 <td>
                                     {% if title == "title" %}
@@ -29,27 +46,218 @@
                                     {% endif %}
                                 </td>
                             {% endfor %}
-                            <td class="action-buttons">
-                                <button type="submit" name="action_{{ index }}" value="A" class="btn-action btn-archive">A</button>
-                                <button type="submit" name="action_{{ index }}" value="D" class="btn-action btn-delete">D</button>
-                            </td>
                         </tr>
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+
+        <!-- Boutons pour définir l'action sur les lignes sélectionnées -->
+        <div class="action-buttons">
+            <button type="button" id="set_selected_a" class="btn btn-secondary">Définir les sélectionnés en archive</button>
+            <button type="button" id="set_selected_d" class="btn btn-secondary">Définir les sélectionnés en suppression</button>
+            <button type="submit" class="btn btn-primary">Enregistrer les modifications</button>
+        </div>
+    </form>
+
+    <!-- Boutons "Télécharger le CSV" et "Traiter le CSV" -->
+    <div class="action-buttons">
+        <a href="{{ url_for('download_csv', csv_file=csv_file) }}" class="btn btn-primary">Télécharger le CSV</a>
+        <form action="{{ url_for('process_csv', csv_file=csv_file) }}" method="post" style="display: inline;">
+            <button type="submit" class="btn btn-warning">Traiter le CSV</button>
         </form>
     </div>
-    <a href="{{ url_for('download_csv', csv_file=csv_file) }}" class="btn btn-primary">Télécharger le CSV</a>
 {% endblock %}
 
 {% block scripts %}
 <script>
     $(document).ready(function() {
-        $('#csvTable').DataTable({
+        // Initialisation de DataTable
+        var table = $('#csvTable').DataTable({
             "paging": true,
             "searching": true,
             "ordering": true,
         });
+
+        // Fonction pour interpréter les opérateurs de comparaison
+        function parseFilterValue(inputValue) {
+            var operator = inputValue.match(/^[<>]=?/); // Match les opérateurs (<, >, <=, >=)
+            var value = inputValue.replace(/^[<>]=?/, '').trim(); // Extrait la valeur (nombre ou date)
+            return { operator: operator ? operator[0] : null, value: value };
+        }
+
+        // Fonction pour vérifier et formater les dates
+        function parseDate(dateStr) {
+            var parts = dateStr.split('-');
+            if (parts.length === 3) {
+                var year = parseInt(parts[0], 10);
+                var month = parseInt(parts[1], 10) - 1;
+                var day = parseInt(parts[2], 10);
+                return new Date(year, month, day);
+            }
+            return null;
+        }
+
+        // Filtre personnalisé pour les colonnes numériques et dates
+        $.fn.dataTable.ext.search.push(
+            function(settings, data, dataIndex) {
+                // Ajustement des indices des colonnes
+                // data[1]: title
+                // data[2]: rating
+                // data[3]: plex_rating
+                // data[4]: key
+                // data[5]: added_at
+                // data[6]: release_date
+                // data[7]: file_size
+                // data[8]: server
+                // data[9]: Action
+
+                // 1. Filtrage sur la colonne "rating"
+                var filterRating = $('#filter_rating').val();
+                var rating = parseFloat(data[2].replace(',', '.')) || 0;
+
+                if (filterRating) {
+                    var filter = parseFilterValue(filterRating);
+                    var filterValue = parseFloat(filter.value);
+                    if (!isNaN(filterValue)) {
+                        switch (filter.operator) {
+                            case '>': if (!(rating > filterValue)) return false; break;
+                            case '>=': if (!(rating >= filterValue)) return false; break;
+                            case '<': if (!(rating < filterValue)) return false; break;
+                            case '<=': if (!(rating <= filterValue)) return false; break;
+                            default: if (rating != filterValue) return false; break;
+                        }
+                    }
+                }
+
+                // 2. Filtrage sur la colonne "plex_rating"
+                var filterPlexRating = $('#filter_plex_rating').val();
+                var plexRating = parseFloat(data[3].replace(',', '.')) || 0;
+
+                if (filterPlexRating) {
+                    var filterPlex = parseFilterValue(filterPlexRating);
+                    var filterValuePlex = parseFloat(filterPlex.value);
+                    if (!isNaN(filterValuePlex)) {
+                        switch (filterPlex.operator) {
+                            case '>': if (!(plexRating > filterValuePlex)) return false; break;
+                            case '>=': if (!(plexRating >= filterValuePlex)) return false; break;
+                            case '<': if (!(plexRating < filterValuePlex)) return false; break;
+                            case '<=': if (!(plexRating <= filterValuePlex)) return false; break;
+                            default: if (plexRating != filterValuePlex) return false; break;
+                        }
+                    }
+                }
+
+                // 3. Filtrage sur la colonne "file_size"
+                var filterFileSize = $('#filter_file_size').val();
+                var fileSize = parseFloat(data[7].replace(' Go', '').replace(',', '.')) || 0;
+
+                if (filterFileSize) {
+                    var filterFile = parseFilterValue(filterFileSize);
+                    var filterValueFile = parseFloat(filterFile.value);
+                    if (!isNaN(filterValueFile)) {
+                        switch (filterFile.operator) {
+                            case '>': if (!(fileSize > filterValueFile)) return false; break;
+                            case '>=': if (!(fileSize >= filterValueFile)) return false; break;
+                            case '<': if (!(fileSize < filterValueFile)) return false; break;
+                            case '<=': if (!(fileSize <= filterValueFile)) return false; break;
+                            default: if (fileSize != filterValueFile) return false; break;
+                        }
+                    }
+                }
+
+                // 4. Filtrage sur la colonne "added_at"
+                var filterAddedAt = $('#filter_added_at').val();
+                var addedAtStr = data[5];
+                var addedAt = parseDate(addedAtStr);
+
+                if (filterAddedAt) {
+                    var filterAdded = parseFilterValue(filterAddedAt);
+                    var filterDateAdded = parseDate(filterAdded.value);
+                    if (filterDateAdded && addedAt) {
+                        if (!isNaN(addedAt.getTime())) {
+                            switch (filterAdded.operator) {
+                                case '>': if (!(addedAt.getTime() > filterDateAdded.getTime())) return false; break;
+                                case '>=': if (!(addedAt.getTime() >= filterDateAdded.getTime())) return false; break;
+                                case '<': if (!(addedAt.getTime() < filterDateAdded.getTime())) return false; break;
+                                case '<=': if (!(addedAt.getTime() <= filterDateAdded.getTime())) return false; break;
+                                default: if (addedAt.getTime() !== filterDateAdded.getTime()) return false; break;
+                            }
+                        }
+                    }
+                }
+
+                // 5. Filtrage sur la colonne "release_date"
+                var filterReleaseDate = $('#filter_release_date').val();
+                var releaseDateStr = data[6];
+                var releaseDate = parseDate(releaseDateStr);
+
+                if (filterReleaseDate) {
+                    var filterRelease = parseFilterValue(filterReleaseDate);
+                    var filterDateRelease = parseDate(filterRelease.value);
+                    if (filterDateRelease && releaseDate) {
+                        if (!isNaN(releaseDate.getTime())) {
+                            switch (filterRelease.operator) {
+                                case '>': if (!(releaseDate.getTime() > filterDateRelease.getTime())) return false; break;
+                                case '>=': if (!(releaseDate.getTime() >= filterDateRelease.getTime())) return false; break;
+                                case '<': if (!(releaseDate.getTime() < filterDateRelease.getTime())) return false; break;
+                                case '<=': if (!(releaseDate.getTime() <= filterDateRelease.getTime())) return false; break;
+                                default: if (releaseDate.getTime() !== filterDateRelease.getTime()) return false; break;
+                            }
+                        }
+                    }
+                }
+
+                return true;
+            }
+        );
+
+        // Appliquer le filtre lorsque les champs changent
+        $('#filter_rating, #filter_plex_rating, #filter_file_size, #filter_added_at, #filter_release_date').on('keyup change', function() {
+            table.draw();
+        });
+
+        // Sélectionner / Désélectionner toutes les cases visibles
+        $('#select_all').on('click', function() {
+            var rows = table.rows({ 'search': 'applied' }).nodes();
+            $('input[type="checkbox"].row-select', rows).prop('checked', this.checked);
+        });
+
+        // Désélectionner "Sélectionner tout" si une case est décochée
+        $('#csvTable tbody').on('change', 'input[type="checkbox"].row-select', function() {
+            if (!this.checked) {
+                var el = $('#select_all').get(0);
+                if (el && el.checked && ('indeterminate' in el)) {
+                    el.indeterminate = true;
+                }
+            }
+        });
+
+        // Définir l'action sur les lignes sélectionnées
+        $('#set_selected_a').on('click', function() {
+            setActionOnSelectedRows('A');
+        });
+
+        $('#set_selected_d').on('click', function() {
+            setActionOnSelectedRows('D');
+        });
+
+        function setActionOnSelectedRows(action) {
+            var rows = table.rows({ 'search': 'applied' }).nodes();
+            $('input[type="checkbox"].row-select:checked', rows).each(function() {
+                var row = $(this).closest('tr');
+                var index = $(this).val();
+                // Ajouter un champ caché pour envoyer l'action au serveur
+                $('<input>').attr({
+                    type: 'hidden',
+                    name: 'action_' + index,
+                    value: action
+                }).appendTo('#csvForm');
+                // Mettre à jour la colonne "Action" dans le tableau affiché
+                var actionCell = row.find('td').last();
+                actionCell.text(action);
+            });
+        }
     });
 </script>
 {% endblock %}

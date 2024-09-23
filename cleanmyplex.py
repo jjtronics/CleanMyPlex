@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory
+from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, jsonify
 import requests
 import pandas as pd
 from plexapi.server import PlexServer
@@ -6,6 +6,9 @@ from plexapi.myplex import MyPlexAccount
 from datetime import datetime, timedelta
 import json
 import os
+import threading
+import time
+import operator
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'
@@ -56,121 +59,105 @@ def check_hardware_acceleration_logs(log_file_path):
     except FileNotFoundError:
         return False
 
+# Fonction pour comparer les bibliothèques et générer un CSV des doublons
+def compare_libraries(library_name_local, library_name_friend, media_type):
+    friend_server = account.resource(FRIEND_SERVER_NAME).connect()
+    friend_library = friend_server.library.section(library_name_friend)
+    local_library = plex.library.section(library_name_local)
+
+    friend_titles = {item.title for item in friend_library.all()}
+    duplicates = []
+    total_space_saved = 0
+
+    for item in local_library.all():
+        if item.title in friend_titles:
+            file_size_gb = 0
+            if media_type == 'movie':
+                file_size_gb = sum(media_part.size for media in item.media for media_part in media.parts) / (1024 ** 3)
+            elif media_type == 'show':
+                file_size_gb = sum(media_part.size for episode in item.episodes() for media in episode.media for media_part in media.parts) / (1024 ** 3)
+            duplicates.append({
+                'title': item.title,
+                'key': item.key,
+                'file_size': f"{file_size_gb:.2f} Go",
+                'Action': ''
+            })
+            total_space_saved += file_size_gb
+
+    df = pd.DataFrame(duplicates)
+    output_file = CSV_FILE_COMMON_MOVIES if media_type == 'movie' else CSV_FILE_COMMON_SERIES
+    df.to_csv(output_file, index=False)
+
+    return df, output_file, len(duplicates), total_space_saved
+
+# Fonction pour générer le CSV
 def generate_csv(library_name, csv_file):
     if os.path.exists(csv_file):
-        existing_df = pd.read_csv(csv_file)
+        existing_df = pd.read_csv(csv_file, encoding='utf-8', delimiter=',', quotechar='"')
     else:
-        existing_df = pd.DataFrame(columns=['title', 'rating', 'key', 'added_at', 'release_date', 'file_size', 'server', 'Action'])
+        existing_df = pd.DataFrame(columns=['title', 'rating', 'plex_rating', 'key', 'added_at', 'release_date', 'file_size', 'server', 'Action'])
 
     items = plex.library.section(library_name).all()
-    existing_keys = [item.key for item in items]
-    existing_df = existing_df[existing_df['key'].isin(existing_keys)]
 
-    date_limit = datetime.now() - timedelta(days=DAYS_TO_IGNORE)
     new_items = []
     for item in items:
         release_date = item.originallyAvailableAt if item.originallyAvailableAt else None
         rating = item.audienceRating if item.audienceRating else 0
 
-        # Filtrage des films
-        if item.TYPE == 'movie':
-            if (item.viewCount is None or item.viewCount == 0) and (item.addedAt < date_limit):
-                if release_date and release_date <= RELEASE_DATE_LIMIT:
-                    if (rating < RATING_LIMIT) and (INCLUDE_UNRATED or rating != 0):
-                        file_size_gb = sum(media_part.size for media in item.media for media_part in media.parts) / (1024 ** 3)
-                        new_items.append({
-                            'title': item.title,
-                            'rating': rating,
-                            'key': item.key,
-                            'added_at': item.addedAt.strftime('%Y-%m-%d'),
-                            'release_date': release_date.strftime('%Y-%m-%d') if release_date else 'N/A',
-                            'file_size': file_size_gb,
-                            'server': library_name,
-                            'Action': ''
-                        })
+        plex_rating = item.userRating if hasattr(item, 'userRating') and item.userRating else item.rating if item.rating else 0
 
-        # Filtrage des séries
+        # Films
+        if item.TYPE == 'movie':
+            file_size_gb = sum(media_part.size for media in item.media for media_part in media.parts) / (1024 ** 3)
+            new_items.append({
+                'title': item.title,
+                'rating': rating,
+                'plex_rating': plex_rating,
+                'key': item.key,
+                'added_at': item.addedAt.strftime('%Y-%m-%d'),
+                'release_date': release_date.strftime('%Y-%m-%d') if release_date else 'N/A',
+                'file_size': file_size_gb,
+                'server': library_name,
+                'Action': ''
+            })
+
+        # Séries
         elif item.TYPE == 'show':
-            if (item.viewCount is None or item.viewCount == 0) and (item.addedAt < date_limit):
-                if release_date and release_date <= RELEASE_DATE_LIMIT:
-                    if (rating < RATING_LIMIT) and (INCLUDE_UNRATED or rating != 0):
-                        file_size_gb = sum(media_part.size for episode in item.episodes() for media in episode.media for media_part in media.parts) / (1024 ** 3)
-                        new_items.append({
-                            'title': item.title,
-                            'rating': rating,
-                            'key': item.key,
-                            'added_at': item.addedAt.strftime('%Y-%m-%d'),
-                            'release_date': release_date.strftime('%Y-%m-%d') if release_date else 'N/A',
-                            'file_size': file_size_gb,
-                            'server': library_name,
-                            'Action': ''
-                        })
+            file_size_gb = sum(media_part.size for episode in item.episodes() for media in episode.media for media_part in media.parts) / (1024 ** 3)
+            new_items.append({
+                'title': item.title,
+                'rating': rating,
+                'plex_rating': plex_rating,
+                'key': item.key,
+                'added_at': item.addedAt.strftime('%Y-%m-%d'),
+                'release_date': release_date.strftime('%Y-%m-%d') if release_date else 'N/A',
+                'file_size': file_size_gb,
+                'server': library_name,
+                'Action': ''
+            })
 
     new_df = pd.DataFrame(new_items)
-    if not existing_df.empty and not new_df.empty:
-        combined_df = pd.concat([existing_df, new_df]).drop_duplicates(subset='key', keep='first').reset_index(drop=True)
-    elif not existing_df.empty:
-        combined_df = existing_df
-    else:
-        combined_df = new_df
 
+    combined_df = pd.concat([existing_df, new_df]).drop_duplicates(subset='key', keep='first').reset_index(drop=True)
     combined_df['Action'] = combined_df['Action'].fillna('')
     combined_df['file_size'] = combined_df['file_size'].fillna(0.00)
     combined_df['file_size'] = pd.to_numeric(combined_df['file_size'], errors='coerce').fillna(0)
-    combined_df = combined_df.infer_objects()
-    combined_df['server'] = combined_df['server'].fillna('')
     combined_df['file_size'] = combined_df['file_size'].apply(lambda x: f"{x:.2f} Go")
-    combined_df = combined_df.sort_values(by=['Action', 'added_at'], ascending=[False, True])
-    columns_order = ['title', 'rating', 'key', 'added_at', 'release_date', 'file_size', 'server', 'Action']
+    combined_df = combined_df.sort_values(by=['added_at'], ascending=True)
+
+    columns_order = ['title', 'rating', 'plex_rating', 'key', 'added_at', 'release_date', 'file_size', 'server', 'Action']
     combined_df = combined_df[columns_order]
+
     combined_df.to_csv(csv_file, index=False)
     return combined_df, csv_file
 
-def compare_libraries(library_name, friend_library_name, item_type):
-    friend_server = account.resource(FRIEND_SERVER_NAME).connect()
-    friend_library = friend_server.library.section(friend_library_name)
-    my_library = plex.library.section(library_name)
-
-    my_items = {item.title: item for item in my_library.all()}
-    friend_items = {item.title: item for item in friend_library.all()}
-
-    common_items = []
-    total_size_gained = 0
-    for title in my_items:
-        if title in friend_items:
-            if item_type == 'movie':
-                my_size = sum(media_part.size for media in my_items[title].media for media_part in media.parts)
-                friend_size = sum(media_part.size for media in friend_items[title].media for media_part in media.parts)
-                larger_size = max(my_size, friend_size)
-                server = 'BOTH' if my_size == friend_size else 'Mine' if my_size > friend_size else 'Friend'
-            else:  # item_type == 'show'
-                my_size = sum(media_part.size for episode in my_items[title].episodes() for media in episode.media for media_part in media.parts)
-                friend_size = sum(media_part.size for episode in friend_items[title].episodes() for media in episode.media for media_part in media.parts)
-                larger_size = max(my_size, friend_size)
-                server = 'BOTH' if my_size == friend_size else 'Mine' if my_size > friend_size else 'Friend'
-                my_episodes_count = len(my_items[title].episodes())
-                friend_episodes_count = len(friend_items[title].episodes())
-            total_size_gained += larger_size / (1024 ** 3)  # Convertir en Go
-            common_item = {
-                'title': title,
-                'rating': my_items[title].audienceRating if my_items[title].audienceRating else 0,
-                'key': my_items[title].key,
-                'added_at': my_items[title].addedAt.strftime('%Y-%m-%d'),
-                'release_date': my_items[title].originallyAvailableAt.strftime('%Y-%m-%d') if my_items[title].originallyAvailableAt else 'N/A',
-                'local_file_size': f"{my_size / (1024 ** 3):.2f} Go",  # Convertir en Go
-                'remote_file_size': f"{friend_size / (1024 ** 3):.2f} Go",  # Convertir en Go
-                'largest_file_size': f"{larger_size / (1024 ** 3):.2f} Go",  # Convertir en Go
-                'server': server
-            }
-            if item_type == 'show':
-                common_item['number_of_local_episodes'] = my_episodes_count
-                common_item['number_of_remote_episodes'] = friend_episodes_count
-            common_items.append(common_item)
-
-    common_df = pd.DataFrame(common_items)
-    output_file = CSV_FILE_COMMON_MOVIES if item_type == 'movie' else CSV_FILE_COMMON_SERIES
-    common_df.to_csv(output_file, index=False)
-    return common_df, output_file, len(common_items), total_size_gained
+# Fonction de génération de CSV en arrière-plan avec thread
+def generate_csv_thread(library_name, csv_file):
+    try:
+        generate_csv(library_name, csv_file)
+        print(f"CSV {csv_file} généré avec succès.")
+    except Exception as e:
+        print(f"Erreur lors de la génération du CSV : {e}")
 
 def delete_items_from_csv(csv_file):
     if not os.path.exists(csv_file):
@@ -190,9 +177,52 @@ def delete_items_from_csv(csv_file):
 
     df.to_csv(csv_file, index=False)
 
+# Fonction pour appliquer un filtre numérique
+def apply_numeric_filter(df, column_name, filter_str):
+    ops = {
+        '>=': operator.ge,
+        '<=': operator.le,
+        '>': operator.gt,
+        '<': operator.lt,
+        '==': operator.eq,
+        '!=': operator.ne,
+    }
+    for op_str, op_func in ops.items():
+        if filter_str.startswith(op_str):
+            try:
+                value = float(filter_str[len(op_str):].strip())
+                return df[op_func(df[column_name].astype(float), value)]
+            except ValueError:
+                flash(f"Valeur numérique invalide pour le filtre sur {column_name}.", 'danger')
+                break
+    return df
+
+# Fonction pour appliquer un filtre de date
+def apply_date_filter(df, column_name, filter_str):
+    ops = {
+        '>=': operator.ge,
+        '<=': operator.le,
+        '>': operator.gt,
+        '<': operator.lt,
+        '==': operator.eq,
+        '!=': operator.ne,
+    }
+    for op_str, op_func in ops.items():
+        if filter_str.startswith(op_str):
+            date_str = filter_str[len(op_str):].strip()
+            try:
+                date_value = pd.to_datetime(date_str, errors='coerce')
+                if pd.isnull(date_value):
+                    flash(f"Date invalide pour le filtre sur {column_name}.", 'danger')
+                    break
+                return df[op_func(df[column_name], date_value)]
+            except ValueError:
+                flash(f"Erreur lors de l'analyse de la date pour le filtre sur {column_name}.", 'danger')
+                break
+    return df
+
 @app.route('/')
 def index():
-    # Check if CSV files exist
     films_csv_exists = os.path.exists(CSV_FILE_FILMS)
     series_csv_exists = os.path.exists(CSV_FILE_SERIES)
     common_movies_csv_exists = os.path.exists(CSV_FILE_COMMON_MOVIES)
@@ -202,7 +232,6 @@ def index():
 @app.route('/delete_csv', methods=['POST'])
 def delete_csv():
     csv_file = request.form.get('csv_file')
-    print(f"Received request to delete file: {csv_file}")  # Debug statement
     if not csv_file:
         flash(f"Aucun fichier spécifié pour la suppression.", 'danger')
         return redirect(url_for('index'))
@@ -210,15 +239,12 @@ def delete_csv():
     valid_files = [CSV_FILE_FILMS, CSV_FILE_SERIES, CSV_FILE_COMMON_MOVIES, CSV_FILE_COMMON_SERIES]
     if csv_file in valid_files:
         file_path = os.path.join(os.getcwd(), csv_file)
-        print(f"Attempting to delete file at path: {file_path}")  # Debug statement
         if os.path.isfile(file_path):
             os.remove(file_path)
             flash(f"Fichier {csv_file} supprimé avec succès.", 'success')
         else:
-            print(f"File not found: {file_path}")  # Debug statement
             flash(f"Le fichier {csv_file} n'existe pas.", 'danger')
     else:
-        print(f"Invalid file specified: {csv_file}")  # Debug statement
         flash(f"Le fichier {csv_file} spécifié est invalide.", 'danger')
     return redirect(url_for('index'))
 
@@ -227,11 +253,13 @@ def clean():
     if request.method == 'POST':
         library = request.form.get('library')
         if library == 'films':
-            df, csv_file = generate_csv(FILM_LIBRARY_NAME, CSV_FILE_FILMS)
+            csv_file = CSV_FILE_FILMS
+            threading.Thread(target=generate_csv_thread, args=(FILM_LIBRARY_NAME, csv_file)).start()
         else:
-            df, csv_file = generate_csv(SERIES_LIBRARY_NAME, CSV_FILE_SERIES)
-        flash('CSV généré avec succès.', 'success')
-        return redirect(url_for('view_csv', csv_file=csv_file))
+            csv_file = CSV_FILE_SERIES
+            threading.Thread(target=generate_csv_thread, args=(SERIES_LIBRARY_NAME, csv_file)).start()
+        flash('La génération du CSV a démarré en arrière-plan.', 'info')
+        return redirect(url_for('index'))
     return render_template('clean.html', films_csv_exists=os.path.exists(CSV_FILE_FILMS), series_csv_exists=os.path.exists(CSV_FILE_SERIES))
 
 @app.route('/duplicates', methods=['GET', 'POST'])
@@ -268,7 +296,12 @@ def view_csv(csv_file):
         flash('Le fichier CSV spécifié n\'existe pas.', 'danger')
         return redirect(url_for('index'))
 
+    # Convertir les colonnes de date en datetime
+    df['added_at'] = pd.to_datetime(df['added_at'], errors='coerce')
+    df['release_date'] = pd.to_datetime(df['release_date'], errors='coerce')
+
     if request.method == 'POST':
+        # Mise à jour des actions (A pour Archiver, D pour Supprimer)
         for index, row in df.iterrows():
             action = request.form.get(f'action_{index}')
             if action in ['A', 'D']:
@@ -276,6 +309,22 @@ def view_csv(csv_file):
         df.to_csv(csv_file, index=False)
         flash('CSV mis à jour avec succès.', 'success')
         return redirect(url_for('view_csv', csv_file=csv_file))
+
+    # Récupérer les filtres depuis les paramètres de requête
+    rating_filter = request.args.get('rating_filter')
+    plex_rating_filter = request.args.get('plex_rating_filter')
+    added_at_filter = request.args.get('added_at_filter')
+    release_date_filter = request.args.get('release_date_filter')
+
+    # Appliquer les filtres
+    if rating_filter:
+        df = apply_numeric_filter(df, 'rating', rating_filter)
+    if plex_rating_filter:
+        df = apply_numeric_filter(df, 'plex_rating', plex_rating_filter)
+    if added_at_filter:
+        df = apply_date_filter(df, 'added_at', added_at_filter)
+    if release_date_filter:
+        df = apply_date_filter(df, 'release_date', release_date_filter)
 
     return render_template('view_csv.html', df=df, titles=df.columns.values, csv_file=csv_file)
 
@@ -295,6 +344,7 @@ def view_existing_csv(library):
 @app.route('/process_csv/<csv_file>', methods=['POST'])
 def process_csv(csv_file):
     delete_items_from_csv(csv_file)
+    flash('Le CSV a été traité avec succès.', 'success')
     return redirect(url_for('view_csv', csv_file=csv_file))
 
 @app.route('/download/<csv_file>')

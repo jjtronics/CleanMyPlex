@@ -244,3 +244,16 @@ form.inline-form {
     color: #0056b3; /* Couleur au survol, similaire à un lien standard */
     text-decoration: underline; /* Ajoute un soulignement au survol */
 }
+
+
+.btn-warning {
+    color: #fff;
+    background-color: #fd7e14;
+    border-color: #fd7e14;
+}
+
+.btn-warning:hover {
+    color: #fff;
+    background-color: #e8590c;
+    border-color: #e8590c;
+}
