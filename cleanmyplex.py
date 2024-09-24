@@ -48,10 +48,10 @@ def is_hardware_acceleration_enabled():
 
 def check_hardware_acceleration_logs(log_file_path):
     try:
-        with open(log_file_path, 'r', encoding='latin1') as log_file:
+        with codecs.open(log_file_path, 'r', 'latin1') as log_file:
             log_content = log_file.read()
             return 'hardware transcoding' in log_content
-    except FileNotFoundError:
+    except IOError:
         return False
 
 # Fonction pour comparer les bibliothèques et générer un CSV des doublons
@@ -123,7 +123,7 @@ def compare_libraries(library_name_local, library_name_friend, media_type):
                 'local_file_size': f"{local_file_size_gb:.2f} Go",
                 'remote_file_size': f"{remote_file_size_gb:.2f} Go",
                 'largest_file_size': f"{largest_file_size_gb:.2f} Go",
-                'server': library_name_local,
+                'Bibliothèque': library_name_local,
                 'Action': ''
             }
 
@@ -141,12 +141,12 @@ def compare_libraries(library_name_local, library_name_friend, media_type):
     if media_type == 'movie':
         columns_order = [
             'title', 'rating', 'plex_rating', 'key', 'added_at', 'release_date',
-            'local_file_size', 'remote_file_size', 'largest_file_size', 'server', 'Action'
+            'local_file_size', 'remote_file_size', 'largest_file_size', 'Bibliothèque', 'Action'
         ]
     else:  # Pour les séries
         columns_order = [
             'title', 'rating', 'plex_rating', 'key', 'added_at', 'release_date',
-            'local_file_size', 'remote_file_size', 'largest_file_size', 'server',
+            'local_file_size', 'remote_file_size', 'largest_file_size', 'Bibliothèque',
             'number_of_local_episodes', 'number_of_remote_episodes', 'Action'
         ]
     df = df[columns_order]
@@ -161,8 +161,11 @@ def compare_libraries(library_name_local, library_name_friend, media_type):
 def generate_csv(library_name, csv_file):
     if os.path.exists(csv_file):
         existing_df = pd.read_csv(csv_file, encoding='utf-8', delimiter=',', quotechar='"')
+        # Convertir 'file_size' en numérique en supprimant ' Go'
+        existing_df['file_size'] = existing_df['file_size'].replace('N/A', '0')
+        existing_df['file_size'] = existing_df['file_size'].str.replace(' Go', '', regex=False).astype(float)
     else:
-        existing_df = pd.DataFrame(columns=['title', 'rating', 'plex_rating', 'key', 'added_at', 'release_date', 'file_size', 'server', 'Action'])
+        existing_df = pd.DataFrame(columns=['title', 'rating', 'plex_rating', 'key', 'added_at', 'release_date', 'file_size', 'Bibliothèque', 'Action'])
 
     items = plex.library.section(library_name).all()
 
@@ -184,13 +187,18 @@ def generate_csv(library_name, csv_file):
                 'added_at': item.addedAt.strftime('%Y-%m-%d'),
                 'release_date': release_date.strftime('%Y-%m-%d') if release_date else 'N/A',
                 'file_size': file_size_gb,
-                'server': library_name,
+                'Bibliothèque': library_name,
                 'Action': ''
             })
 
         # Séries
         elif item.TYPE == 'show':
-            file_size_gb = sum(media_part.size for episode in item.episodes() for media in episode.media for media_part in media.parts) / (1024 ** 3)
+            file_size_gb = sum(
+                media_part.size
+                for episode in item.episodes()
+                for media in episode.media
+                for media_part in media.parts
+            ) / (1024 ** 3)
             new_items.append({
                 'title': item.title,
                 'rating': rating,
@@ -199,7 +207,7 @@ def generate_csv(library_name, csv_file):
                 'added_at': item.addedAt.strftime('%Y-%m-%d'),
                 'release_date': release_date.strftime('%Y-%m-%d') if release_date else 'N/A',
                 'file_size': file_size_gb,
-                'server': library_name,
+                'Bibliothèque': library_name,
                 'Action': ''
             })
 
@@ -209,10 +217,12 @@ def generate_csv(library_name, csv_file):
     combined_df['Action'] = combined_df['Action'].fillna('')
     combined_df['file_size'] = combined_df['file_size'].fillna(0.00)
     combined_df['file_size'] = pd.to_numeric(combined_df['file_size'], errors='coerce').fillna(0)
-    combined_df['file_size'] = combined_df['file_size'].apply(lambda x: f"{x:.2f} Go")
     combined_df = combined_df.sort_values(by=['added_at'], ascending=True)
 
-    columns_order = ['title', 'rating', 'plex_rating', 'key', 'added_at', 'release_date', 'file_size', 'server', 'Action']
+    # Formater 'file_size' avant d'écrire dans le CSV
+    combined_df['file_size'] = combined_df['file_size'].apply(lambda x: f"{x:.2f} Go")
+
+    columns_order = ['title', 'rating', 'plex_rating', 'key', 'added_at', 'release_date', 'file_size', 'Bibliothèque', 'Action']
     combined_df = combined_df[columns_order]
 
     combined_df.to_csv(csv_file, index=False)
@@ -376,7 +386,6 @@ def compare_libraries_thread(library_name_local, library_name_friend, media_type
     except Exception as e:
         print(f"Erreur lors de la comparaison des bibliothèques : {e}")
 
-
 @app.route('/hardware', methods=['GET'])
 def hardware():
     hw_accel_enabled = is_hardware_acceleration_enabled()
@@ -389,7 +398,6 @@ def hardware():
     else:
         flash("L'encodage matériel n'est pas activé sur le serveur Plex.", 'danger')
     return redirect(url_for('index'))
-
 
 @app.route('/view_csv/<csv_file>', methods=['GET', 'POST'])
 def view_csv(csv_file):
