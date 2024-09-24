@@ -1,0 +1,13 @@
+[Unit]
+Description=CleanMyPlex Service
+After=network.target
+
+[Service]
+User=cleanmyplex
+WorkingDirectory=/opt/cleanmyplex
+ExecStart=/bin/bash -c 'source /opt/cleanmyplex/plex_env/bin/activate && exec python3 /opt/cleanmyplex/cleanmyplex.py'
+Restart=always
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
