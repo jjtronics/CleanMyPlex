@@ -54,10 +54,6 @@ CleanMyPlex est une application web permettant de gérer et nettoyer vos bibliot
     "PLEX_USERNAME": "your_plex_username",
     "PLEX_PASSWORD": "your_plex_password",
     "FRIEND_SERVER_NAME": "FriendServerName",
-    "FRIEND_LIBRARY_NAME_FILMS": "FriendFilmsLibrary",
-    "FRIEND_LIBRARY_NAME_SERIES": "FriendSeriesLibrary",
-    "FILM_LIBRARY_NAME": "MyFilmsLibrary",
-    "SERIES_LIBRARY_NAME": "MySeriesLibrary",
     "LOG_FILE_PATH": "/path/to/plex/logs/Plex Media Server.log"
    }
 
