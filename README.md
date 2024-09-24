@@ -2,7 +2,7 @@
 
 ![CleanMyPlex Logo](https://github.com/jjtronics/CleanMyPlex/blob/main/static/logo.png)
 
-CleanMyPlex est une application web permettant de gérer et nettoyer vos bibliothèques Plex. Elle permet également de faire une comparaison entre deux serveurs plex pour trouver les plus gros doublons.
+CleanMyPlex est une application web permettant de gérer et nettoyer vos bibliothèques Plex. Elle permet également de faire une comparaison entre deux serveurs plex pour trouver les doublons.
 
 ## Fonctionnalités
 
