@@ -25,6 +25,10 @@
                                 <th>
                                     <input type="text" id="filter_{{ title }}" placeholder="Filtrer {{ title }} (yyyy-mm-dd)" class="column-filter">
                                 </th>
+                            {% elif title == "title" or title == "Bibliothèque" %}
+                                <th>
+                                    <input type="text" id="filter_{{ title }}" placeholder="Filtrer {{ title }}" class="column-filter">
+                                </th>
                             {% else %}
                                 <th><input type="text" placeholder="Filtrer {{ title }}" class="column-filter"></th>
                             {% endif %}
@@ -122,21 +126,24 @@
             }
         });
 
-        // Filtre personnalisé pour les colonnes numériques et dates
+        // Ajout de 'title' et 'Bibliothèque' dans les filtres
+        var filters = [
+            { id: 'title', type: 'string' },
+            { id: 'Bibliothèque', type: 'string' },
+            { id: 'rating', type: 'number' },
+            { id: 'plex_rating', type: 'number' },
+            { id: 'file_size', type: 'number' },
+            { id: 'local_file_size', type: 'number' },
+            { id: 'remote_file_size', type: 'number' },
+            { id: 'largest_file_size', type: 'number' },
+            { id: 'added_at', type: 'date' },
+            { id: 'release_date', type: 'date' }
+        ];
+
+        // Filtre personnalisé pour les colonnes numériques, dates et string
         $.fn.dataTable.ext.search.push(
             function(settings, data, dataIndex) {
                 // Filtrage dynamique basé sur les colonnes disponibles
-                var filters = [
-                    { id: 'rating', type: 'number' },
-                    { id: 'plex_rating', type: 'number' },
-                    { id: 'file_size', type: 'number' },
-                    { id: 'local_file_size', type: 'number' },
-                    { id: 'remote_file_size', type: 'number' },
-                    { id: 'largest_file_size', type: 'number' },
-                    { id: 'added_at', type: 'date' },
-                    { id: 'release_date', type: 'date' }
-                ];
-
                 for (var i = 0; i < filters.length; i++) {
                     var filter = filters[i];
                     var filterValue = $('#filter_' + filter.id).val();
@@ -170,6 +177,12 @@
                                         default: if (dateValue.getTime() !== filterDate.getTime()) return false; break;
                                     }
                                 }
+                            }
+                        } else if (filter.type === 'string') {
+                            var filterText = filterValue.toLowerCase();
+                            var dataText = dataValue.toLowerCase();
+                            if (dataText.indexOf(filterText) === -1) {
+                                return false;
                             }
                         }
                     }

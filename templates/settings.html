@@ -22,26 +22,17 @@
             <label for="PLEX_PASSWORD">Plex Password:</label>
             <input type="password" class="form-control" id="PLEX_PASSWORD" name="PLEX_PASSWORD" value="{{ config.PLEX_PASSWORD }}" required>
         </div>
+        
         <div class="form-group">
             <label for="FRIEND_SERVER_NAME">Nom du serveur Plex de l'ami:</label>
-            <input type="text" class="form-control" id="FRIEND_SERVER_NAME" name="FRIEND_SERVER_NAME" value="{{ config.FRIEND_SERVER_NAME }}" required>
+            <select class="form-control" id="FRIEND_SERVER_NAME" name="friend_server_name" required>
+                {% for server in friend_server_names %}
+                    <option value="{{ server }}" {% if server == config.FRIEND_SERVER_NAME %}selected{% endif %}>{{ server }}</option>
+                {% endfor %}
+            </select>
+            <small class="form-text text-muted">Sélectionnez le serveur Plex de votre ami.</small>
         </div>
-        <div class="form-group">
-            <label for="FRIEND_LIBRARY_NAME_FILMS">Nom de la bibliothèque des films de l'ami:</label>
-            <input type="text" class="form-control" id="FRIEND_LIBRARY_NAME_FILMS" name="FRIEND_LIBRARY_NAME_FILMS" value="{{ config.FRIEND_LIBRARY_NAME_FILMS }}" required>
-        </div>
-        <div class="form-group">
-            <label for="FRIEND_LIBRARY_NAME_SERIES">Nom de la bibliothèque des séries de l'ami:</label>
-            <input type="text" class="form-control" id="FRIEND_LIBRARY_NAME_SERIES" name="FRIEND_LIBRARY_NAME_SERIES" value="{{ config.FRIEND_LIBRARY_NAME_SERIES }}" required>
-        </div>
-        <div class="form-group">
-            <label for="FILM_LIBRARY_NAME">Nom de votre bibliothèque des films:</label>
-            <input type="text" class="form-control" id="FILM_LIBRARY_NAME" name="FILM_LIBRARY_NAME" value="{{ config.FILM_LIBRARY_NAME }}" required>
-        </div>
-        <div class="form-group">
-            <label for="SERIES_LIBRARY_NAME">Nom de votre bibliothèque des séries:</label>
-            <input type="text" class="form-control" id="SERIES_LIBRARY_NAME" name="SERIES_LIBRARY_NAME" value="{{ config.SERIES_LIBRARY_NAME }}" required>
-        </div>
+
         <div class="form-group">
             <label for="LOG_FILE_PATH">Chemin du fichier de log:</label>
             <input type="text" class="form-control" id="LOG_FILE_PATH" name="LOG_FILE_PATH" value="{{ config.LOG_FILE_PATH }}" required>

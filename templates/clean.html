@@ -7,14 +7,28 @@
 {% block content %}
     <form method="post">
         <div class="form-group">
-            <label for="library">Choisissez une bibliothèque :</label>
-            <select class="form-control" id="library" name="library">
-                <option value="films">Films</option>
-                <option value="series">Séries</option>
+            <label for="library_names_films">Sélectionnez les bibliothèques de films à scanner :</label>
+            <select multiple class="form-control" id="library_names_films" name="library_names_films">
+                {% for lib in local_movie_libraries %}
+                    <option value="{{ lib }}">{{ lib }}</option>
+                {% endfor %}
             </select>
+            <small class="form-text text-muted">Maintenez Ctrl (Windows) ou Cmd (Mac) pour sélectionner plusieurs options.</small>
         </div>
+
+        <div class="form-group">
+            <label for="library_names_series">Sélectionnez les bibliothèques de séries à scanner :</label>
+            <select multiple class="form-control" id="library_names_series" name="library_names_series">
+                {% for lib in local_show_libraries %}
+                    <option value="{{ lib }}">{{ lib }}</option>
+                {% endfor %}
+            </select>
+            <small class="form-text text-muted">Maintenez Ctrl (Windows) ou Cmd (Mac) pour sélectionner plusieurs options.</small>
+        </div>
+
         <button type="submit" class="btn btn-primary">Générer CSV</button>
     </form>
+
     <h2 class="my-4">CSV existants</h2>
     <div class="list-group">
         {% if films_csv_exists %}
@@ -42,4 +56,10 @@
             </div>
         {% endif %}
     </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Aucun script nécessaire ici puisque nous avons supprimé le menu déroulant de type de bibliothèque
+</script>
 {% endblock %}

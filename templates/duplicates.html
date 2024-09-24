@@ -2,27 +2,74 @@
 
 {% block title %}Doublons{% endblock %}
 
+{% block header_title %}Gestion des Doublons{% endblock %}
+
 {% block content %}
     <form method="post">
-        <div class="form-group">
-            <label for="library">Choisissez une bibliothèque :</label>
-            <select class="form-control" id="library" name="library">
-                <option value="films">Films</option>
-                <option value="series">Séries</option>
-            </select>
+        <div class="row">
+            <!-- Comparaison des Films -->
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label for="local_library_movies">Sélectionnez les bibliothèques de vos films à comparer :</label>
+                    <select multiple class="form-control" id="local_library_movies" name="local_library_movies">
+                        {% for lib in local_movie_libraries %}
+                            <option value="{{ lib }}">{{ lib }}</option>
+                        {% endfor %}
+                    </select>
+                    <small class="form-text text-muted">Maintenez Ctrl (Windows) ou Cmd (Mac) pour sélectionner plusieurs options.</small>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label for="friend_library_movies">Sélectionnez les bibliothèques de films de l'ami à comparer :</label>
+                    <select multiple class="form-control" id="friend_library_movies" name="friend_library_movies">
+                        {% for lib in friend_movie_libraries %}
+                            <option value="{{ lib }}">{{ lib }}</option>
+                        {% endfor %}
+                    </select>
+                    <small class="form-text text-muted">Maintenez Ctrl (Windows) ou Cmd (Mac) pour sélectionner plusieurs options.</small>
+                </div>
+            </div>
         </div>
-        <button type="submit" class="btn btn-primary">Comparer</button>
+
+        <div class="row">
+            <!-- Comparaison des Séries -->
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label for="local_library_series">Sélectionnez les bibliothèques de vos séries à comparer :</label>
+                    <select multiple class="form-control" id="local_library_series" name="local_library_series">
+                        {% for lib in local_show_libraries %}
+                            <option value="{{ lib }}">{{ lib }}</option>
+                        {% endfor %}
+                    </select>
+                    <small class="form-text text-muted">Maintenez Ctrl (Windows) ou Cmd (Mac) pour sélectionner plusieurs options.</small>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="form-group">
+                    <label for="friend_library_series">Sélectionnez les bibliothèques de séries de l'ami à comparer :</label>
+                    <select multiple class="form-control" id="friend_library_series" name="friend_library_series">
+                        {% for lib in friend_show_libraries %}
+                            <option value="{{ lib }}">{{ lib }}</option>
+                        {% endfor %}
+                    </select>
+                    <small class="form-text text-muted">Maintenez Ctrl (Windows) ou Cmd (Mac) pour sélectionner plusieurs options.</small>
+                </div>
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Comparer les Bibliothèques</button>
     </form>
 
-    <h2 class="my-4">CSV des doublons existants</h2>
+    <h2 class="my-4">CSV des Doublons existants</h2>
     <div class="list-group">
         {% if common_movies_csv_exists %}
             <div class="list-group-item d-flex justify-content-between align-items-center mb-2">
-                <div class="d-flex align-items-center flex-grow-1">
-                    <a href="{{ url_for('view_existing_csv', library='common_movies') }}" class="text-dark">Voir CSV des films en doublon</a>
+                <div class="d-flex align-items-center">
+                    <a href="{{ url_for('view_existing_csv', library='common_movies') }}" class="text-dark">Voir CSV des doublons de films</a>
                     <small class="text-muted ml-2">(Dernière modification : {{ common_movies_csv_mtime }})</small>
                 </div>
-                <form action="{{ url_for('delete_csv') }}" method="post" class="inline-form mb-0">
+                <form action="{{ url_for('delete_csv') }}" method="post" class="mb-0">
                     <input type="hidden" name="csv_file" value="common_movies.csv">
                     <button type="submit" class="btn btn-danger btn-sm">🗑️</button>
                 </form>
@@ -30,15 +77,21 @@
         {% endif %}
         {% if common_series_csv_exists %}
             <div class="list-group-item d-flex justify-content-between align-items-center mb-2">
-                <div class="d-flex align-items-center flex-grow-1">
-                    <a href="{{ url_for('view_existing_csv', library='common_series') }}" class="text-dark">Voir CSV des séries en doublon</a>
+                <div class="d-flex align-items-center">
+                    <a href="{{ url_for('view_existing_csv', library='common_series') }}" class="text-dark">Voir CSV des doublons de séries</a>
                     <small class="text-muted ml-2">(Dernière modification : {{ common_series_csv_mtime }})</small>
                 </div>
-                <form action="{{ url_for('delete_csv') }}" method="post" class="inline-form mb-0">
+                <form action="{{ url_for('delete_csv') }}" method="post" class="mb-0">
                     <input type="hidden" name="csv_file" value="common_series.csv">
                     <button type="submit" class="btn btn-danger btn-sm">🗑️</button>
                 </form>
             </div>
         {% endif %}
     </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Aucun script spécifique nécessaire ici
+</script>
 {% endblock %}
