@@ -75,7 +75,7 @@ def get_library_sections(plex_server, media_type):
 # Fonction pour comparer les bibliothèques et générer un CSV des doublons
 def compare_libraries(library_names_local, library_names_friend, media_type):
     friend_server = account.resource(FRIEND_SERVER_NAME).connect()
-    
+
     # Récupérer les bibliothèques sélectionnées ou toutes
     if "ALL" in library_names_friend:
         friend_libraries = friend_server.library.sections()
@@ -160,12 +160,24 @@ def compare_libraries(library_names_local, library_names_friend, media_type):
                 rating = local_item.audienceRating if local_item.audienceRating else 0
                 plex_rating = local_item.userRating if local_item.userRating else local_item.rating if local_item.rating else 0
 
+                # Nombre de visionnages et chemin local
+                if media_type == 'movie':
+                    view_count = local_item.viewCount if hasattr(local_item, 'viewCount') else 0
+                    local_file_path = local_item.media[0].parts[0].file if local_item.media and local_item.media[0].parts else 'N/A'
+                elif media_type == 'show':
+                    view_count = sum(episode.viewCount for episode in local_item.episodes() if hasattr(episode, 'viewCount'))
+                    local_file_path = 'N/A'  # Vous pouvez personnaliser cela si nécessaire
+                else:
+                    view_count = 0
+                    local_file_path = 'N/A'
+
                 # Créer l'entrée dupliquée
                 duplicate_entry = {
                     'title': title,
                     'rating': rating,
                     'plex_rating': plex_rating,
-                    'key': local_item.key,
+                    'view_count': view_count,  # Nouvelle colonne
+                    'local_path': local_file_path,  # Nouvelle colonne
                     'added_at': added_at,
                     'release_date': release_date,
                     'local_file_size': f"{local_file_size_gb:.2f} Go",
@@ -188,12 +200,14 @@ def compare_libraries(library_names_local, library_names_friend, media_type):
     # Définir l'ordre des colonnes
     if media_type == 'movie':
         columns_order = [
-            'title', 'rating', 'plex_rating', 'key', 'added_at', 'release_date',
+            'title', 'rating', 'plex_rating', 'view_count', 'local_path',
+            'added_at', 'release_date',
             'local_file_size', 'remote_file_size', 'largest_file_size', 'Bibliothèque', 'Action'
         ]
     else:  # Pour les séries
         columns_order = [
-            'title', 'rating', 'plex_rating', 'key', 'added_at', 'release_date',
+            'title', 'rating', 'plex_rating', 'view_count', 'local_path',
+            'added_at', 'release_date',
             'local_file_size', 'remote_file_size', 'largest_file_size', 'Bibliothèque',
             'number_of_local_episodes', 'number_of_remote_episodes', 'Action'
         ]
@@ -214,9 +228,9 @@ def generate_csv(library_names, csv_file, media_type):
         existing_df['file_size'] = existing_df['file_size'].str.replace(' Go', '', regex=False).astype(float)
     else:
         if media_type == 'movie':
-            columns = ['title', 'rating', 'plex_rating', 'key', 'added_at', 'release_date', 'file_size', 'Bibliothèque', 'Action']
+            columns = ['title', 'rating', 'plex_rating', 'view_count', 'local_path', 'added_at', 'release_date', 'file_size', 'Bibliothèque', 'Action']
         else:
-            columns = ['title', 'rating', 'plex_rating', 'key', 'added_at', 'release_date', 'file_size', 'Bibliothèque', 'Action']
+            columns = ['title', 'rating', 'plex_rating', 'view_count', 'local_path', 'added_at', 'release_date', 'file_size', 'Bibliothèque', 'Action']
         existing_df = pd.DataFrame(columns=columns)
 
     # Récupérer toutes les bibliothèques sélectionnées
@@ -243,14 +257,17 @@ def generate_csv(library_names, csv_file, media_type):
 
             plex_rating = item.userRating if hasattr(item, 'userRating') and item.userRating else item.rating if item.rating else 0
 
-            # Films
+            # Nombre de visionnages et chemin local
             if item.TYPE == 'movie':
+                view_count = item.viewCount if hasattr(item, 'viewCount') else 0
+                local_path = item.media[0].parts[0].file if item.media and item.media[0].parts else 'N/A'
                 file_size_gb = sum(media_part.size for media in item.media for media_part in media.parts) / (1024 ** 3)
                 new_items.append({
                     'title': item.title,
                     'rating': rating,
                     'plex_rating': plex_rating,
-                    'key': item.key,
+                    'view_count': view_count,  # Nouvelle colonne
+                    'local_path': local_path,  # Nouvelle colonne
                     'added_at': item.addedAt.strftime('%Y-%m-%d') if item.addedAt else 'N/A',
                     'release_date': release_date.strftime('%Y-%m-%d') if release_date else 'N/A',
                     'file_size': file_size_gb,
@@ -258,8 +275,9 @@ def generate_csv(library_names, csv_file, media_type):
                     'Action': ''
                 })
 
-            # Séries
             elif item.TYPE == 'show':
+                view_count = sum(episode.viewCount for episode in item.episodes() if hasattr(episode, 'viewCount'))
+                local_path = 'N/A'  # Vous pouvez personnaliser cela si nécessaire
                 file_size_gb = sum(
                     media_part.size
                     for episode in item.episodes()
@@ -270,7 +288,8 @@ def generate_csv(library_names, csv_file, media_type):
                     'title': item.title,
                     'rating': rating,
                     'plex_rating': plex_rating,
-                    'key': item.key,
+                    'view_count': view_count,  # Nouvelle colonne
+                    'local_path': local_path,  # Nouvelle colonne
                     'added_at': item.addedAt.strftime('%Y-%m-%d') if item.addedAt else 'N/A',
                     'release_date': release_date.strftime('%Y-%m-%d') if release_date else 'N/A',
                     'file_size': file_size_gb,
@@ -280,7 +299,7 @@ def generate_csv(library_names, csv_file, media_type):
 
     new_df = pd.DataFrame(new_items)
 
-    combined_df = pd.concat([existing_df, new_df]).drop_duplicates(subset='key', keep='first').reset_index(drop=True)
+    combined_df = pd.concat([existing_df, new_df]).drop_duplicates(subset='title', keep='first').reset_index(drop=True)
     combined_df['Action'] = combined_df['Action'].fillna('')
     combined_df['file_size'] = combined_df['file_size'].fillna(0.00)
     combined_df['file_size'] = pd.to_numeric(combined_df['file_size'], errors='coerce').fillna(0)
@@ -289,7 +308,17 @@ def generate_csv(library_names, csv_file, media_type):
     # Formater 'file_size' avant d'écrire dans le CSV
     combined_df['file_size'] = combined_df['file_size'].apply(lambda x: f"{x:.2f} Go")
 
-    columns_order = ['title', 'rating', 'plex_rating', 'key', 'added_at', 'release_date', 'file_size', 'Bibliothèque', 'Action']
+    # Définir l'ordre des colonnes
+    if media_type == 'movie':
+        columns_order = [
+            'title', 'rating', 'plex_rating', 'view_count', 'local_path',
+            'added_at', 'release_date', 'file_size', 'Bibliothèque', 'Action'
+        ]
+    else:
+        columns_order = [
+            'title', 'rating', 'plex_rating', 'view_count', 'local_path',
+            'added_at', 'release_date', 'file_size', 'Bibliothèque', 'Action'
+        ]
     combined_df = combined_df[columns_order]
 
     combined_df.to_csv(csv_file, index=False)
@@ -313,9 +342,13 @@ def delete_items_from_csv(csv_file):
 
     for index, row in items_to_delete.iterrows():
         try:
-            plex.fetchItem(row['key']).delete()
-            flash(f"{row['title']} supprimé avec succès.", 'success')
-            df.drop(index, inplace=True)
+            local_path = row['local_path']
+            if local_path != 'N/A' and os.path.exists(local_path):
+                os.remove(local_path)
+                flash(f"{row['title']} supprimé avec succès.", 'success')
+                df.drop(index, inplace=True)
+            else:
+                flash(f"Chemin local invalide pour {row['title']}.", 'danger')
         except Exception as e:
             flash(f"Erreur lors de la suppression de {row['title']}: {e}", 'danger')
 
@@ -327,10 +360,10 @@ def index():
     series_csv_exists = os.path.exists(CSV_FILE_SERIES)
     common_movies_csv_exists = os.path.exists(CSV_FILE_COMMON_MOVIES)
     common_series_csv_exists = os.path.exists(CSV_FILE_COMMON_SERIES)
-    return render_template('index.html', 
-                           films_csv_exists=films_csv_exists, 
-                           series_csv_exists=series_csv_exists, 
-                           common_movies_csv_exists=common_movies_csv_exists, 
+    return render_template('index.html',
+                           films_csv_exists=films_csv_exists,
+                           series_csv_exists=series_csv_exists,
+                           common_movies_csv_exists=common_movies_csv_exists,
                            common_series_csv_exists=common_series_csv_exists)
 
 @app.route('/delete_csv', methods=['POST'])
@@ -491,17 +524,29 @@ def view_csv(csv_file):
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], errors='coerce')
 
+    # Récupérer la liste unique des bibliothèques pour les menus déroulants
+    unique_libraries = df['Bibliothèque'].unique().tolist()
+
+    # Liste des actions possibles
+    actions = ['A', 'D']
+
     if request.method == 'POST':
-        # Mise à jour des actions (A pour Archiver, D pour Supprimer)
+        # Mise à jour des actions et bibliothèques (si nécessaire)
         for index, row in df.iterrows():
             action = request.form.get(f'action_{index}')
-            if action in ['A', 'D']:
+            if action in actions:
                 df.at[index, 'Action'] = action
+
+            # Si vous souhaitez permettre la modification de la Bibliothèque, décommentez les lignes suivantes
+            # new_library = request.form.get(f'bibliotheque_{index}')
+            # if new_library in unique_libraries:
+            #     df.at[index, 'Bibliothèque'] = new_library
+
         df.to_csv(csv_file, index=False)
         flash('CSV mis à jour avec succès.', 'success')
         return redirect(url_for('view_csv', csv_file=csv_file))
 
-    return render_template('view_csv.html', df=df, titles=df.columns.values, csv_file=csv_file)
+    return render_template('view_csv.html', df=df, titles=df.columns.values, csv_file=csv_file, unique_libraries=unique_libraries, actions=actions)
 
 @app.route('/view_existing_csv/<library>')
 def view_existing_csv(library):
@@ -513,6 +558,9 @@ def view_existing_csv(library):
         csv_file = CSV_FILE_COMMON_MOVIES
     elif library == 'common_series':
         csv_file = CSV_FILE_COMMON_SERIES
+    else:
+        flash("Bibliothèque CSV inconnue.", 'danger')
+        return redirect(url_for('index'))
 
     return redirect(url_for('view_csv', csv_file=csv_file))
 
@@ -587,3 +635,4 @@ def settings():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)
+

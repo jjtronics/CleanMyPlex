@@ -17,7 +17,7 @@
                     <tr>
                         <th></th>
                         {% for title in titles %}
-                            {% if title in ["rating", "plex_rating", "file_size", "local_file_size", "remote_file_size", "largest_file_size"] %}
+                            {% if title in ["rating", "plex_rating", "view_count", "file_size", "local_file_size", "remote_file_size", "largest_file_size"] %}
                                 <th>
                                     <input type="text" id="filter_{{ title }}" placeholder="Filtrer {{ title }}" class="column-filter">
                                 </th>
@@ -25,7 +25,7 @@
                                 <th>
                                     <input type="text" id="filter_{{ title }}" placeholder="Filtrer {{ title }} (yyyy-mm-dd)" class="column-filter">
                                 </th>
-                            {% elif title == "title" or title == "Bibliothèque" %}
+                            {% elif title == "title" or title == "Bibliothèque" or title == "local_path" %}
                                 <th>
                                     <input type="text" id="filter_{{ title }}" placeholder="Filtrer {{ title }}" class="column-filter">
                                 </th>
@@ -45,6 +45,8 @@
                                         <a href="https://www.google.com/search?q={{ 'film ' if 'unwatched_movies' in csv_file else 'série ' }}{{ row[title] }}" target="_blank">
                                             {{ row[title] }}
                                         </a>
+                                    {% elif title == "local_path" %}
+                                        {{ row[title] }}
                                     {% else %}
                                         {% if row[title] == '' or row[title] == 'N/A' %}
                                             N/A
@@ -126,10 +128,11 @@
             }
         });
 
-        // Ajout de 'title' et 'Bibliothèque' dans les filtres
+        // Ajout de 'title', 'Bibliothèque', 'view_count' et 'local_path' dans les filtres
         var filters = [
             { id: 'title', type: 'string' },
             { id: 'Bibliothèque', type: 'string' },
+            { id: 'view_count', type: 'number' },
             { id: 'rating', type: 'number' },
             { id: 'plex_rating', type: 'number' },
             { id: 'file_size', type: 'number' },
@@ -137,7 +140,8 @@
             { id: 'remote_file_size', type: 'number' },
             { id: 'largest_file_size', type: 'number' },
             { id: 'added_at', type: 'date' },
-            { id: 'release_date', type: 'date' }
+            { id: 'release_date', type: 'date' },
+            { id: 'local_path', type: 'string' }
         ];
 
         // Filtre personnalisé pour les colonnes numériques, dates et string
