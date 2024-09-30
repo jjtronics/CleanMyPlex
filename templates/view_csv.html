@@ -5,32 +5,57 @@
 {% block content %}
     <h2>CSV - {{ csv_file }}</h2>
     <form method="post" id="csvForm">
-        <div class="table-container">
+        <div class="table-responsive">
             <table class="table table-bordered" id="csvTable">
                 <thead>
                     <tr>
                         <th><input type="checkbox" id="select_all"></th>
                         {% for title in titles %}
-                            <th>{{ title }}</th>
+                            {% if title != 'poster_url' and title not in ['summary', 'genres', 'directors', 'actors'] %}
+                                <th>{{ title }}</th>
+                            {% endif %}
                         {% endfor %}
                     </tr>
+                    <!-- Ligne des filtres -->
                     <tr>
                         <th></th>
                         {% for title in titles %}
-                            {% if title in ["rating", "plex_rating", "view_count", "file_size", "local_file_size", "remote_file_size", "largest_file_size"] %}
-                                <th>
-                                    <input type="text" id="filter_{{ title }}" placeholder="Filtrer {{ title }}" class="column-filter">
-                                </th>
-                            {% elif title in ["added_at", "release_date"] %}
-                                <th>
-                                    <input type="text" id="filter_{{ title }}" placeholder="Filtrer {{ title }} (yyyy-mm-dd)" class="column-filter">
-                                </th>
-                            {% elif title == "title" or title == "Bibliothèque" or title == "local_path" %}
-                                <th>
-                                    <input type="text" id="filter_{{ title }}" placeholder="Filtrer {{ title }}" class="column-filter">
-                                </th>
-                            {% else %}
-                                <th><input type="text" placeholder="Filtrer {{ title }}" class="column-filter"></th>
+                            {% if title != 'poster_url' and title not in ['summary', 'genres', 'directors', 'actors'] %}
+                                {% if title in ["rating", "plex_rating", "view_count", "file_size", "local_file_size", "remote_file_size", "largest_file_size"] %}
+                                    <th>
+                                        <input type="text" id="filter_{{ title }}" placeholder="Filtrer {{ title }}" class="column-filter">
+                                    </th>
+                                {% elif title in ["added_at", "release_date"] %}
+                                    <th>
+                                        <input type="text" id="filter_{{ title }}" placeholder="Filtrer {{ title }} (yyyy-mm-dd)" class="column-filter date-filter">
+                                    </th>
+                                {% elif title == "Bibliothèque" %}
+                                    <th>
+                                        <select id="filter_{{ title }}" class="column-filter">
+                                            <option value="">Tous</option>
+                                            {% for lib in unique_libraries %}
+                                                <option value="{{ lib }}">{{ lib }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </th>
+                                {% elif title == "Action" %}
+                                    <th>
+                                        <select id="filter_{{ title }}" class="column-filter">
+                                            <option value="">Tous</option>
+                                            {% for action in unique_actions %}
+                                                {% if action != '' %}
+                                                    <option value="{{ action }}">{{ action }}</option>
+                                                {% endif %}
+                                            {% endfor %}
+                                        </select>
+                                    </th>
+                                {% elif title == "title" or title == "local_path" %}
+                                    <th>
+                                        <input type="text" id="filter_{{ title }}" placeholder="Filtrer {{ title }}" class="column-filter">
+                                    </th>
+                                {% else %}
+                                    <th><input type="text" id="filter_{{ title }}" placeholder="Filtrer {{ title }}" class="column-filter"></th>
+                                {% endif %}
                             {% endif %}
                         {% endfor %}
                     </tr>
@@ -40,21 +65,28 @@
                         <tr>
                             <td><input type="checkbox" class="row-select" name="selected_rows" value="{{ index }}"></td>
                             {% for title in titles %}
-                                <td>
-                                    {% if title == "title" %}
-                                        <a href="https://www.google.com/search?q={{ 'film ' if 'unwatched_movies' in csv_file else 'série ' }}{{ row[title] }}" target="_blank">
-                                            {{ row[title] }}
-                                        </a>
-                                    {% elif title == "local_path" %}
-                                        {{ row[title] }}
-                                    {% else %}
-                                        {% if row[title] == '' or row[title] == 'N/A' %}
+                                {% if title != 'poster_url' and title not in ['summary', 'genres', 'directors', 'actors'] %}
+                                    <td data-title="{{ title }}">
+                                        {% if title == "title" %}
+                                            <a href="#" class="item-title" 
+                                               data-poster-url="{{ row['poster_url'] }}"
+                                               data-summary="{{ row['summary'] }}"
+                                               data-release-date="{{ row['release_date'] }}"
+                                               data-rating="{{ row['rating'] }}"
+                                               data-plex-rating="{{ row['plex_rating'] }}"
+                                               data-view-count="{{ row['view_count'] }}"
+                                               data-genres="{{ row['genres'] }}"
+                                               data-directors="{{ row['directors'] }}"
+                                               data-actors="{{ row['actors'] }}">
+                                                {{ row[title] }}
+                                            </a>
+                                        {% elif row[title] == '' or row[title] == 'N/A' %}
                                             N/A
                                         {% else %}
                                             {{ row[title] }}
                                         {% endif %}
-                                    {% endif %}
-                                </td>
+                                    </td>
+                                {% endif %}
                             {% endfor %}
                         </tr>
                     {% endfor %}
@@ -64,13 +96,11 @@
 
         <!-- Boutons pour définir l'action sur les lignes sélectionnées -->
         {% if csv_file in ['common_movies.csv', 'common_series.csv'] %}
-            <!-- Affichage pour les CSV de comparaison des doublons -->
             <div class="action-buttons">
-                <button type="button" id="set_selected_d" class="btn btn-secondary">Définir les sélectionnés en suppression local</button>
+                <button type="button" id="set_selected_d" class="btn btn-secondary">Définir les sélectionnés en suppression locale</button>
                 <button type="submit" class="btn btn-primary">Enregistrer les modifications</button>
             </div>
         {% else %}
-            <!-- Affichage pour les autres CSV -->
             <div class="action-buttons">
                 <button type="button" id="set_selected_a" class="btn btn-secondary">Définir les sélectionnés en archive</button>
                 <button type="button" id="set_selected_d" class="btn btn-secondary">Définir les sélectionnés en suppression</button>
@@ -80,15 +110,57 @@
     </form>
 
     <!-- Boutons "Télécharger le CSV" et "Traiter le CSV" -->
-    <div class="action-buttons">
+    <div class="action-buttons mt-3">
         <a href="{{ url_for('download_csv', csv_file=csv_file) }}" class="btn btn-primary">Télécharger le CSV</a>
         <form action="{{ url_for('process_csv', csv_file=csv_file) }}" method="post" style="display: inline;">
             <button type="submit" class="btn btn-warning">Traiter le CSV</button>
         </form>
     </div>
+
+    <!-- Modal pour afficher les informations de l'élément -->
+    <div class="modal fade" id="itemInfoModal" tabindex="-1" aria-labelledby="itemInfoModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="itemInfoModalLabel">Titre de l'élément</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button>
+          </div>
+          <div class="modal-body">
+            <!-- Contenu dynamique -->
+            <div class="row">
+              <div class="col-md-4">
+                <!-- Image de la jaquette (optionnelle) -->
+                <img id="itemPoster" src="" alt="Jaquette" class="img-fluid">
+              </div>
+              <div class="col-md-8">
+                <p id="itemSummary"></p>
+                <p><strong>Année :</strong> <span id="itemYear"></span></p>
+                <p><strong>Note publique :</strong> <span id="itemRating"></span></p>
+                <p><strong>Note Plex :</strong> <span id="itemPlexRating"></span></p>
+                <p><strong>Nombre de visionnages :</strong> <span id="itemViewCount"></span></p>
+                <p><strong>Genres :</strong> <span id="itemGenres"></span></p>
+                <p><strong>Réalisateurs :</strong> <span id="itemDirectors"></span></p>
+                <p><strong>Acteurs :</strong> <span id="itemActors"></span></p>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <!-- Boutons de pied de page optionnels -->
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fermer</button>
+          </div>
+        </div>
+      </div>
+    </div>
 {% endblock %}
 
 {% block scripts %}
+<!-- Inclure jQuery et DataTables si ce n'est pas déjà fait -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<!-- DataTables JavaScript -->
+<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+<!-- Bootstrap JavaScript (pour les modals) -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
 <script>
     $(document).ready(function() {
         // Initialisation de DataTable
@@ -96,111 +168,175 @@
             "paging": true,
             "searching": true,
             "ordering": true,
-            "lengthMenu": [[25, 50, 100, -1], [25, 50, 100, "All"]],
-            // Vous pouvez ajouter "pageLength": 25 si vous souhaitez que 25 soit la valeur par défaut
+            "lengthMenu": [[25, 50, 100, -1], [25, 50, 100, "Tous"]],
+            "pageLength": 25,
+            "language": {
+                "search": "Recherche :",
+                "lengthMenu": "Afficher _MENU_ éléments",
+                "zeroRecords": "Aucun élément trouvé",
+                "info": "Affichage de _START_ à _END_ sur _TOTAL_ éléments",
+                "infoEmpty": "Affichage de 0 à 0 sur 0 éléments",
+                "infoFiltered": "(filtré à partir de _MAX_ éléments au total)",
+                "paginate": {
+                    "first": "Premier",
+                    "last": "Dernier",
+                    "next": "Suivant",
+                    "previous": "Précédent"
+                },
+            },
+            "dom": 'lfrtip'
         });
 
-        // Fonction pour interpréter les opérateurs de comparaison
-        function parseFilterValue(inputValue) {
-            var operator = inputValue.match(/^[<>]=?/); // Match les opérateurs (<, >, <=, >=)
-            var value = inputValue.replace(/^[<>]=?/, '').trim(); // Extrait la valeur (nombre ou date)
-            return { operator: operator ? operator[0] : null, value: value };
-        }
-
-        // Fonction pour vérifier et formater les dates
-        function parseDate(dateStr) {
-            var parts = dateStr.split('-');
-            if (parts.length === 3) {
-                var year = parseInt(parts[0], 10);
-                var month = parseInt(parts[1], 10) - 1;
-                var day = parseInt(parts[2], 10);
-                return new Date(year, month, day);
-            }
-            return null;
-        }
-
-        // Obtenir les indices des colonnes par nom
-        var columnIndices = {};
-        $('#csvTable thead tr:eq(0) th').each(function(index) {
-            var columnName = $(this).text();
-            if (columnName) {
-                columnIndices[columnName] = index;
-            }
-        });
-
-        // Ajout de 'title', 'Bibliothèque', 'view_count' et 'local_path' dans les filtres
-        var filters = [
-            { id: 'title', type: 'string' },
-            { id: 'Bibliothèque', type: 'string' },
-            { id: 'view_count', type: 'number' },
-            { id: 'rating', type: 'number' },
-            { id: 'plex_rating', type: 'number' },
-            { id: 'file_size', type: 'number' },
-            { id: 'local_file_size', type: 'number' },
-            { id: 'remote_file_size', type: 'number' },
-            { id: 'largest_file_size', type: 'number' },
-            { id: 'added_at', type: 'date' },
-            { id: 'release_date', type: 'date' },
-            { id: 'local_path', type: 'string' }
-        ];
-
-        // Filtre personnalisé pour les colonnes numériques, dates et string
-        $.fn.dataTable.ext.search.push(
-            function(settings, data, dataIndex) {
-                // Filtrage dynamique basé sur les colonnes disponibles
-                for (var i = 0; i < filters.length; i++) {
-                    var filter = filters[i];
-                    var filterValue = $('#filter_' + filter.id).val();
-                    if (filterValue && columnIndices[filter.id] !== undefined) {
-                        var dataValue = data[columnIndices[filter.id]];
-
-                        if (filter.type === 'number') {
-                            var numericValue = parseFloat(dataValue.replace(' Go', '').replace(',', '.')) || 0;
-                            var filterParsed = parseFilterValue(filterValue);
-                            var filterNumeric = parseFloat(filterParsed.value);
-                            if (!isNaN(filterNumeric)) {
-                                switch (filterParsed.operator) {
-                                    case '>': if (!(numericValue > filterNumeric)) return false; break;
-                                    case '>=': if (!(numericValue >= filterNumeric)) return false; break;
-                                    case '<': if (!(numericValue < filterNumeric)) return false; break;
-                                    case '<=': if (!(numericValue <= filterNumeric)) return false; break;
-                                    default: if (numericValue != filterNumeric) return false; break;
-                                }
-                            }
-                        } else if (filter.type === 'date') {
-                            var dateValue = parseDate(dataValue);
-                            var filterParsed = parseFilterValue(filterValue);
-                            var filterDate = parseDate(filterParsed.value);
-                            if (filterDate && dateValue) {
-                                if (!isNaN(dateValue.getTime())) {
-                                    switch (filterParsed.operator) {
-                                        case '>': if (!(dateValue.getTime() > filterDate.getTime())) return false; break;
-                                        case '>=': if (!(dateValue.getTime() >= filterDate.getTime())) return false; break;
-                                        case '<': if (!(dateValue.getTime() < filterDate.getTime())) return false; break;
-                                        case '<=': if (!(dateValue.getTime() <= filterDate.getTime())) return false; break;
-                                        default: if (dateValue.getTime() !== filterDate.getTime()) return false; break;
-                                    }
-                                }
-                            }
-                        } else if (filter.type === 'string') {
-                            var filterText = filterValue.toLowerCase();
-                            var dataText = dataValue.toLowerCase();
-                            if (dataText.indexOf(filterText) === -1) {
-                                return false;
-                            }
-                        }
-                    }
-                }
-                return true;
-            }
-        );
-
-        // Appliquer le filtre lorsque les champs changent
+        // Gestionnaire d'événements pour les filtres
         $('.column-filter').on('keyup change', function() {
             table.draw();
         });
 
-        // Sélectionner / Désélectionner toutes les cases visibles
+        // Filtre personnalisé pour gérer les opérateurs mathématiques
+        $.fn.dataTable.ext.search.push(
+            function(settings, data, dataIndex) {
+                var showRow = true;
+                var row = table.row(dataIndex).node();
+
+                $('#csvTable thead tr:eq(1) th').each(function(index) {
+                    if (index === 0) return; // Ignorer la colonne de sélection
+
+                    var input = $(this).find('.column-filter');
+                    if (input.length > 0) {
+                        var filterValue = input.val().trim();
+
+                        if (filterValue) {
+                            // Récupérer la valeur de la cellule correspondante
+                            var dataValue = $(row).find('td').eq(index).text().trim();
+
+                            if (input.is('select')) {
+                                // Pour les éléments select
+                                if (filterValue !== dataValue) {
+                                    showRow = false;
+                                    return false;
+                                }
+                            } else {
+                                // Pour les inputs text
+                                var operatorMatch = filterValue.match(/^(<=|>=|=|<|>)(.*)$/);
+                                if (operatorMatch) {
+                                    var operator = operatorMatch[1];
+                                    var filterContent = operatorMatch[2].trim();
+
+                                    // Gérer les colonnes de date
+                                    if (input.hasClass('date-filter')) {
+                                        var filterDate = new Date(filterContent);
+                                        var dataDate = new Date(dataValue);
+
+                                        if (isNaN(filterDate.getTime()) || isNaN(dataDate.getTime())) {
+                                            showRow = false;
+                                            return false;
+                                        }
+
+                                        switch (operator) {
+                                            case '>':
+                                                if (!(dataDate > filterDate)) showRow = false;
+                                                break;
+                                            case '<':
+                                                if (!(dataDate < filterDate)) showRow = false;
+                                                break;
+                                            case '>=':
+                                                if (!(dataDate >= filterDate)) showRow = false;
+                                                break;
+                                            case '<=':
+                                                if (!(dataDate <= filterDate)) showRow = false;
+                                                break;
+                                            case '=':
+                                            case '==':
+                                                if (dataDate.getTime() !== filterDate.getTime()) showRow = false;
+                                                break;
+                                            default:
+                                                showRow = false;
+                                        }
+                                    } else {
+                                        // Gérer les colonnes numériques
+                                        var filterNumber = parseFloat(filterContent);
+                                        var dataNumber = parseFloat(dataValue.replace(/[^0-9\.-]+/g, ''));
+                                        if (isNaN(dataNumber)) dataNumber = 0;
+
+                                        switch (operator) {
+                                            case '>':
+                                                if (!(dataNumber > filterNumber)) showRow = false;
+                                                break;
+                                            case '<':
+                                                if (!(dataNumber < filterNumber)) showRow = false;
+                                                break;
+                                            case '>=':
+                                                if (!(dataNumber >= filterNumber)) showRow = false;
+                                                break;
+                                            case '<=':
+                                                if (!(dataNumber <= filterNumber)) showRow = false;
+                                                break;
+                                            case '=':
+                                            case '==':
+                                                if (!(dataNumber == filterNumber)) showRow = false;
+                                                break;
+                                            default:
+                                                showRow = false;
+                                        }
+                                    }
+                                } else {
+                                    // Recherche classique (sans opérateur)
+                                    if (dataValue.toLowerCase().indexOf(filterValue.toLowerCase()) === -1) {
+                                        showRow = false;
+                                        return false;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+                return showRow;
+            }
+        );
+
+        // Gestionnaire d'événements pour les titres
+        $('#csvTable tbody').on('click', '.item-title', function(e) {
+            e.preventDefault();
+            var element = $(this);
+
+            // Récupérer les données stockées dans les attributs data-
+            var dataObj = {
+                'title': element.text() || 'N/A',
+                'poster_url': element.data('poster-url') || 'N/A',
+                'summary': element.data('summary') || 'N/A',
+                'release_date': element.data('release-date') || 'N/A',
+                'rating': element.data('rating') || 'N/A',
+                'plex_rating': element.data('plex-rating') || 'N/A',
+                'view_count': element.data('view-count') || 'N/A',
+                'genres': element.data('genres') || 'N/A',
+                'directors': element.data('directors') || 'N/A',
+                'actors': element.data('actors') || 'N/A'
+            };
+
+            // Remplir le modal avec les données du CSV
+            $('#itemInfoModalLabel').text(dataObj['title']);
+            $('#itemSummary').text(dataObj['summary']);
+            $('#itemYear').text(dataObj['release_date']);
+            $('#itemRating').text(dataObj['rating']);
+            $('#itemPlexRating').text(dataObj['plex_rating']);
+            $('#itemViewCount').text(dataObj['view_count']);
+            $('#itemGenres').text(dataObj['genres']);
+            $('#itemDirectors').text(dataObj['directors']);
+            $('#itemActors').text(dataObj['actors']);
+
+            // Mettre à jour la source de l'image de la jaquette
+            if (dataObj['poster_url'] && dataObj['poster_url'] !== 'N/A') {
+                $('#itemPoster').attr('src', dataObj['poster_url']).show();
+            } else {
+                $('#itemPoster').hide();
+            }
+
+            // Afficher le modal
+            var itemInfoModal = new bootstrap.Modal(document.getElementById('itemInfoModal'));
+            itemInfoModal.show();
+        });
+
+        // Gestion du bouton "Sélectionner tout"
         $('#select_all').on('click', function() {
             var rows = table.rows({ 'search': 'applied' }).nodes();
             $('input[type="checkbox"].row-select', rows).prop('checked', this.checked);
@@ -244,9 +380,8 @@
                     value: action
                 }).appendTo('#csvForm');
                 // Mettre à jour la colonne "Action" dans le tableau affiché
-                var actionCellIndex = columnIndices['Action'];
-                if (actionCellIndex !== undefined) {
-                    var actionCell = row.find('td').eq(actionCellIndex);
+                var actionCell = row.find('td[data-title="Action"]');
+                if (actionCell.length) {
                     actionCell.text(action);
                 }
             });
