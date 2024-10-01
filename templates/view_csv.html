@@ -66,9 +66,12 @@
                             <td><input type="checkbox" class="row-select" name="selected_rows" value="{{ index }}"></td>
                             {% for title in titles %}
                                 {% if title != 'poster_url' and title not in ['summary', 'genres', 'directors', 'actors'] %}
-                                    <td data-title="{{ title }}">
+                                    <td data-title="{{ title }}"
+                                        {% if title == 'file_size' and row[title] != '' and row[title] != 'N/A' %}
+                                            data-raw-value="{{ row[title]|replace(' Go', '') }}"
+                                        {% endif %}>
                                         {% if title == "title" %}
-                                            <a href="#" class="item-title" 
+                                            <a href="#" class="item-title"
                                                data-poster-url="{{ row['poster_url'] }}"
                                                data-summary="{{ row['summary'] }}"
                                                data-release-date="{{ row['release_date'] }}"
@@ -83,7 +86,11 @@
                                         {% elif row[title] == '' or row[title] == 'N/A' %}
                                             N/A
                                         {% else %}
-                                            {{ row[title] }}
+                                            {% if title == 'file_size' %}
+                                                {{ row[title] }}
+                                            {% else %}
+                                                {{ row[title] }}
+                                            {% endif %}
                                         {% endif %}
                                     </td>
                                 {% endif %}
@@ -91,6 +98,25 @@
                         </tr>
                     {% endfor %}
                 </tbody>
+                <!-- Table Footer for Totals and Averages -->
+                <tfoot>
+                    <tr>
+                        <th></th>
+                        {% for title in titles %}
+                            {% if title != 'poster_url' and title not in ['summary', 'genres', 'directors', 'actors'] %}
+                                {% if title == "rating" %}
+                                    <th>Moyenne :</th>
+                                {% elif title == "plex_rating" %}
+                                    <th>Moyenne :</th>
+                                {% elif title in ["view_count", "file_size", "local_file_size", "remote_file_size", "largest_file_size"] %}
+                                    <th>Total :</th>
+                                {% else %}
+                                    <th></th>
+                                {% endif %}
+                            {% endif %}
+                        {% endfor %}
+                    </tr>
+                </tfoot>
             </table>
         </div>
 
@@ -163,13 +189,13 @@
 
 <script>
     $(document).ready(function() {
-        // Initialisation de DataTable
+        // Initialisation de DataTable avec footerCallback
         var table = $('#csvTable').DataTable({
             "paging": true,
             "searching": true,
             "ordering": true,
-            "lengthMenu": [[25, 50, 100, -1], [25, 50, 100, "Tous"]],
-            "pageLength": 25,
+            "lengthMenu": [[15, 30, 100, -1], [15, 30, 100, "Tous"]],
+            "pageLength": 15,
             "language": {
                 "search": "Recherche :",
                 "lengthMenu": "Afficher _MENU_ éléments",
@@ -184,7 +210,102 @@
                     "previous": "Précédent"
                 },
             },
-            "dom": 'lfrtip'
+            "dom": 'lfrtip',
+            "columns": [
+                { "name": "select", "orderable": false },  // Colonne de sélection
+                {% for title in titles %}
+                    {% if title != 'poster_url' and title not in ['summary', 'genres', 'directors', 'actors'] %}
+                        { "name": "{{ title }}"{% if title == "Action" %}, "orderable": false{% endif %} },
+                    {% endif %}
+                {% endfor %}
+            ],
+            "footerCallback": function ( row, data, start, end, display ) {
+                var api = this.api();
+
+                // Fonction utilitaire pour formater les nombres
+                var intVal = function ( i ) {
+                    var val = typeof i === 'string' ?
+                        i.replace(/[\€,N\/A Go]/g, '') :  // Supprimer €, N/A, et Go
+                        typeof i === 'number' ?
+                            i : 0;
+                    return parseFloat(val) || 0;
+                };
+
+                // Calculer la moyenne de la colonne 'rating'
+                var ratingData = api.column('rating:name', {filter:'applied'}).data().map(intVal).filter(function(i) { return i !== 0; });
+                if (ratingData.length) {
+                    var ratingSum = ratingData.reduce( function (a, b) { return a + b; }, 0 );
+                    var ratingAvg = ratingSum / ratingData.length;
+                    $( api.column('rating:name').footer() ).html('Moyenne : ' + ratingAvg.toFixed(2));
+                } else {
+                    $( api.column('rating:name').footer() ).html('Moyenne : N/A');
+                }
+
+                // Calculer la moyenne de la colonne 'plex_rating'
+                var plexRatingData = api.column('plex_rating:name', {filter:'applied'}).data().map(intVal).filter(function(i) { return i !== 0; });
+                if (plexRatingData.length) {
+                    var plexRatingSum = plexRatingData.reduce( function (a, b) { return a + b; }, 0 );
+                    var plexRatingAvg = plexRatingSum / plexRatingData.length;
+                    $( api.column('plex_rating:name').footer() ).html('Moyenne : ' + plexRatingAvg.toFixed(2));
+                } else {
+                    $( api.column('plex_rating:name').footer() ).html('Moyenne : N/A');
+                }
+
+                // Calculer le total de la colonne 'view_count'
+                var viewCountTotal = api.column('view_count:name', {filter:'applied'}).data()
+                    .map(intVal)
+                    .reduce( function (a, b) { return a + b; }, 0 );
+
+                $( api.column('view_count:name').footer() ).html('Total : ' + viewCountTotal);
+
+                // Calculer le total de la colonne 'file_size'
+                var fileSizeTotal = 0;
+                api.rows({filter: 'applied'}).every(function(rowIdx, tableLoop, rowLoop) {
+                    var data = this.node();
+                    var rawValue = $(data).find('td[data-title="file_size"]').data('raw-value');
+                    var num = parseFloat(rawValue);
+                    if (!isNaN(num)) {
+                        fileSizeTotal += num;
+                    }
+                });
+                $( api.column('file_size:name').footer() ).html('Total : ' + fileSizeTotal.toFixed(2) + ' Go');
+
+                // Calculer le total de la colonne 'local_file_size'
+                var localFileSizeTotal = 0;
+                api.rows({filter: 'applied'}).every(function(rowIdx, tableLoop, rowLoop) {
+                    var data = this.node();
+                    var rawValue = $(data).find('td[data-title="local_file_size"]').text().replace(' Go', '');
+                    var num = parseFloat(rawValue);
+                    if (!isNaN(num)) {
+                        localFileSizeTotal += num;
+                    }
+                });
+                $(api.column('local_file_size:name').footer()).html('Total : ' + localFileSizeTotal.toFixed(2) + ' Go');
+
+                // Calculer le total de la colonne 'remote_file_size'
+                var remoteFileSizeTotal = 0;
+                api.rows({filter: 'applied'}).every(function(rowIdx, tableLoop, rowLoop) {
+                    var data = this.node();
+                    var rawValue = $(data).find('td[data-title="remote_file_size"]').text().replace(' Go', '');
+                    var num = parseFloat(rawValue);
+                    if (!isNaN(num)) {
+                        remoteFileSizeTotal += num;
+                    }
+                });
+                $(api.column('remote_file_size:name').footer()).html('Total : ' + remoteFileSizeTotal.toFixed(2) + ' Go');
+
+                // Calculer le total de la colonne 'largest_file_size'
+                var largestFileSizeTotal = 0;
+                api.rows({filter: 'applied'}).every(function(rowIdx, tableLoop, rowLoop) {
+                    var data = this.node();
+                    var rawValue = $(data).find('td[data-title="largest_file_size"]').text().replace(' Go', '');
+                    var num = parseFloat(rawValue);
+                    if (!isNaN(num)) {
+                        largestFileSizeTotal += num;
+                    }
+                });
+                $(api.column('largest_file_size:name').footer()).html('Total : ' + largestFileSizeTotal.toFixed(2) + ' Go');
+            }
         });
 
         // Gestionnaire d'événements pour les filtres

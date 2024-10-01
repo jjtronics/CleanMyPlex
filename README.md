@@ -14,9 +14,8 @@ CleanMyPlex est une application web permettant de gérer et nettoyer vos bibliot
   - Comparaison des bibliothèques de films et séries entre deux serveurs Plex.
   - Génération de fichiers CSV des éléments en commun.
   - Calcul de l’espace disque pouvant être libéré en supprimant les doublons.
-- Vérification de l’encodage matériel
-  - Vérification de l’état de l’encodage matériel sur votre serveur Plex.
-  - Affichage de l’utilisation de l’encodage matériel dans les sessions en cours.
+- Gestion des utilisateurs
+  - Liste les users, leurs adresse email etc ...
 - Configuration des paramètres
   - Interface web pour configurer les paramètres de l’application.
   - Mise à jour des informations de connexion au serveur Plex et des critères de nettoyage.

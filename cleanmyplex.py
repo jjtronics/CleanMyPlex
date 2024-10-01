@@ -26,7 +26,6 @@ PLEX_TOKEN = config['PLEX_TOKEN']
 PLEX_USERNAME = config['PLEX_USERNAME']
 PLEX_PASSWORD = config['PLEX_PASSWORD']
 FRIEND_SERVER_NAME = config['FRIEND_SERVER_NAME']
-LOG_FILE_PATH = config['LOG_FILE_PATH']
 CSV_FILE_FILMS = 'unwatched_movies.csv'
 CSV_FILE_SERIES = 'unwatched_series.csv'
 CSV_FILE_COMMON_MOVIES = 'common_movies.csv'
@@ -39,24 +38,68 @@ account = MyPlexAccount(PLEX_USERNAME, PLEX_PASSWORD)
 tasks = {}
 tasks_lock = threading.Lock()
 
-def is_hardware_acceleration_enabled():
-    response = requests.get(f'{PLEX_URL}/:/prefs', headers={'X-Plex-Token': PLEX_TOKEN})
-    if response.status_code == 200 and response.text:
-        try:
-            prefs = response.json()
-            return prefs.get('HardwareDecodingEnabled', False)
-        except ValueError:
-            return False
-    else:
-        return False
-
-def check_hardware_acceleration_logs(log_file_path):
+def get_active_sessions():
     try:
-        with codecs.open(log_file_path, 'r', 'latin1') as log_file:
-            log_content = log_file.read()
-            return 'hardware transcoding' in log_content
-    except Exception:
-        return False
+        sessions = plex.sessions()  # Récupère toutes les sessions actives
+        session_data = []
+
+        for session in sessions:
+            # Vérification des informations disponibles dans les sessions
+            last_active = session.startedAt.strftime('%Y-%m-%d %H:%M:%S') if hasattr(session, 'startedAt') and session.startedAt else 'Inconnu'
+            session_info = {
+                'username': session.usernames[0] if session.usernames else 'Inconnu',
+                'publicAddress': session.players[0].address if session.players else 'N/A',
+                'last_active': last_active  # Affiche l'heure de début de la session si disponible
+            }
+            session_data.append(session_info)
+
+        return session_data
+    except Exception as e:
+        flash(f"Erreur lors de la récupération des sessions actives : {e}", 'danger')
+        return []
+
+def get_view_history(user):
+    try:
+        view_history = []
+        # Parcourt toutes les bibliothèques de ton serveur
+        for section in plex.library.sections():
+            # Parcourt tous les éléments dans chaque bibliothèque
+            for item in section.all():
+                # Vérifie si l'utilisateur a vu cet élément
+                if item.viewCount > 0:
+                    view_history.append({
+                        'title': item.title,
+                        'watched': item.viewCount > 0,
+                        'user': user.username
+                    })
+        return view_history
+    except Exception as e:
+        flash(f"Erreur lors de la récupération de l'historique de lecture : {e}", 'danger')
+        return []
+
+def get_last_activity(user):
+    try:
+        last_activity = None
+        
+        # Parcourt toutes les bibliothèques de ton serveur
+        for section in plex.library.sections():
+            # Parcourt tous les éléments dans chaque bibliothèque
+            for item in section.all():
+                # Filtrer les historiques qui appartiennent à cet utilisateur
+                history = item.history()
+                for view in history:
+                    # Utiliser 'view.user.username' pour vérifier si c'est l'utilisateur correct
+                    if view.user and view.user.username == user.username:
+                        # Si l'utilisateur a vu cet élément, on vérifie la date de l'activité
+                        if not last_activity or view.viewedAt > last_activity:
+                            last_activity = view.viewedAt
+        
+        # Retourne la dernière date d'activité si elle existe, sinon 'Inconnu'
+        return last_activity.strftime('%Y-%m-%d %H:%M:%S') if last_activity else 'Inconnu'
+    except Exception as e:
+        flash(f"Erreur lors de la récupération de la dernière activité pour l'utilisateur {user.username} : {e}", 'danger')
+        return 'Inconnu'
+
 
 # Fonction pour récupérer dynamiquement les sections de bibliothèque
 def get_library_sections(plex_server, media_type):
@@ -421,6 +464,88 @@ def delete_items_from_csv(csv_file):
 
     df.to_csv(csv_file, index=False)
 
+@app.route('/test_token', methods=['POST'])
+def test_token():
+    try:
+        test_token = request.form['PLEX_TOKEN']
+        plex_test = PlexServer(config['PLEX_URL'], test_token)
+        # Test de la connexion
+        plex_test.library.sections()  # Si ceci échoue, le token est incorrect
+        return jsonify({'status': 'success', 'message': 'Connexion réussie avec ce token !'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Erreur : {str(e)}'})
+
+@app.route('/test_login', methods=['POST'])
+def test_login():
+    try:
+        plex_username = request.form['PLEX_USERNAME']
+        plex_password = request.form['PLEX_PASSWORD']
+        # Test de la connexion via MyPlexAccount
+        account_test = MyPlexAccount(plex_username, plex_password)
+        account_test.devices()  # Si ceci échoue, les identifiants sont incorrects
+        return jsonify({'status': 'success', 'message': 'Connexion réussie avec ces identifiants !'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': f'Erreur : {str(e)}'})
+
+@app.route('/manage_users')
+def manage_users():
+    try:
+        users = account.users()  # Récupère les utilisateurs partagés
+        sessions = get_active_sessions()  # Récupère les sessions actives
+        user_data = []
+
+        for user in users:
+            # Vérifie s'il existe une session active pour cet utilisateur
+            session_info = next((session for session in sessions if session['username'] == user.username), None)
+
+            # Actif ou non
+            is_active = "Oui" if session_info else "Non"
+
+            user_info = {
+                'username': user.username,
+                'email': user.email if hasattr(user, 'email') else 'N/A',
+                'title': user.title if hasattr(user, 'title') else 'N/A',
+                'userID': user.id,
+                'homeUser': 'Oui' if user.home else 'Non',
+                'role': 'Invité',
+                'is_active': is_active,  # Oui ou Non selon la session active
+                'publicAddress': session_info['publicAddress'] if session_info else 'N/A',
+            }
+            user_data.append(user_info)
+
+        return render_template('manage_users.html', users=user_data)
+    except Exception as e:
+        flash(f"Erreur lors de la récupération des utilisateurs : {e}", 'danger')
+        return redirect(url_for('index'))
+
+@app.route('/user_details/<username>')
+def user_details(username):
+    try:
+        user = next((u for u in account.users() if u.username == username), None)
+        if not user:
+            flash(f"Utilisateur {username} non trouvé", 'danger')
+            return redirect(url_for('manage_users'))
+
+        # Récupération des sessions actives pour l'adresse IP et la dernière activité
+        sessions = get_active_sessions()
+        session_info = next((session for session in sessions if session['username'] == user.username), None)
+
+        user_info = {
+            'username': user.username,
+            'email': user.email if hasattr(user, 'email') else 'N/A',
+            'title': user.title if hasattr(user, 'title') else 'N/A',
+            'userID': user.id,
+            'homeUser': 'Oui' if user.home else 'Non',
+            'publicAddress': session_info['publicAddress'] if session_info else 'N/A',
+            'subscriptionType': user.subscriptionType if hasattr(user, 'subscriptionType') else 'Gratuit',
+            'is_active': "Oui" if session_info else "Non"
+        }
+
+        return render_template('user_details.html', user=user_info)
+    except Exception as e:
+        flash(f"Erreur lors de la récupération des détails de l'utilisateur {username} : {e}", 'danger')
+        return redirect(url_for('manage_users'))
+
 @app.route('/')
 def index():
     films_csv_exists = os.path.exists(CSV_FILE_FILMS)
@@ -593,19 +718,6 @@ def task_status(task_id):
         status = tasks.get(task_id, {'status': 'unknown', 'message': 'Tâche inconnue.'})
     return jsonify(status)
 
-@app.route('/hardware', methods=['GET'])
-def hardware():
-    hw_accel_enabled = is_hardware_acceleration_enabled()
-    if hw_accel_enabled:
-        hw_accel_logs = check_hardware_acceleration_logs(LOG_FILE_PATH)
-        if hw_accel_logs:
-            flash("L'encodage matériel est activé et utilisé dans les sessions en cours.", 'success')
-        else:
-            flash("L'encodage matériel est activé mais aucune session ne l'utilise actuellement.", 'info')
-    else:
-        flash("L'encodage matériel n'est pas activé sur le serveur Plex.", 'danger')
-    return redirect(url_for('index'))
-
 @app.route('/view_csv/<csv_file>', methods=['GET', 'POST'])
 def view_csv(csv_file):
     if os.path.exists(csv_file):
@@ -673,58 +785,41 @@ def download_csv(csv_file):
 @app.route('/settings', methods=['GET', 'POST'])
 def settings():
     global PLEX_URL, PLEX_TOKEN, PLEX_USERNAME, PLEX_PASSWORD
-    global FRIEND_SERVER_NAME, LOG_FILE_PATH
-    global plex, account  # Pour réinitialiser les instances PlexServer et MyPlexAccount
-
-    # Récupérer les noms des bibliothèques depuis votre serveur Plex
-    local_movie_libraries = get_library_sections(plex, 'movie')
-    local_show_libraries = get_library_sections(plex, 'show')
-
-    # Récupérer les noms des ressources (serveurs) depuis votre compte MyPlex
-    try:
-        resources = account.resources()
-        friend_server_names = [resource.name for resource in resources]
-    except Exception as e:
-        flash(f"Erreur lors de la récupération des ressources : {e}", 'danger')
-        friend_server_names = []
-
-    # Ajouter l'option "ALL" si elle n'existe pas déjà
-    for lib_list in [local_movie_libraries, local_show_libraries]:
-        if "ALL" not in lib_list:
-            lib_list.insert(0, "ALL")
+    global FRIEND_SERVER_NAME
+    global plex, account  # Réinitialiser les instances
 
     if request.method == 'POST':
-        config['PLEX_URL'] = request.form['PLEX_URL']
-        config['PLEX_TOKEN'] = request.form['PLEX_TOKEN']
-        config['PLEX_USERNAME'] = request.form['PLEX_USERNAME']
-        config['PLEX_PASSWORD'] = request.form['PLEX_PASSWORD']
-        config['FRIEND_SERVER_NAME'] = request.form['friend_server_name']
-        config['LOG_FILE_PATH'] = request.form['LOG_FILE_PATH']
+        # Utilisation de request.form.get() pour éviter les erreurs KeyError
+        config['PLEX_URL'] = request.form.get('PLEX_URL')
+        config['PLEX_TOKEN'] = request.form.get('PLEX_TOKEN')
+        config['PLEX_USERNAME'] = request.form.get('PLEX_USERNAME')
+        config['PLEX_PASSWORD'] = request.form.get('PLEX_PASSWORD')
+        config['FRIEND_SERVER_NAME'] = request.form.get('friend_server_name', '')
 
         with open('config.json', 'w') as config_file:
             json.dump(config, config_file, indent=4)
 
-        # Mettre à jour les variables globales avec les nouvelles valeurs
+        # Mettre à jour les variables globales
         PLEX_URL = config['PLEX_URL']
         PLEX_TOKEN = config['PLEX_TOKEN']
         PLEX_USERNAME = config['PLEX_USERNAME']
         PLEX_PASSWORD = config['PLEX_PASSWORD']
         FRIEND_SERVER_NAME = config['FRIEND_SERVER_NAME']
-        LOG_FILE_PATH = config['LOG_FILE_PATH']
 
-        # Réinitialiser les instances PlexServer et MyPlexAccount avec les nouvelles configurations
+        # Réinitialiser PlexServer et MyPlexAccount
         plex = PlexServer(PLEX_URL, PLEX_TOKEN)
         account = MyPlexAccount(PLEX_USERNAME, PLEX_PASSWORD)
 
         flash('Paramètres mis à jour avec succès.', 'success')
         return redirect(url_for('index'))
 
+    # Si GET, afficher la page des paramètres avec les valeurs actuelles
     return render_template(
         'settings.html',
         config=config,
-        local_movie_libraries=local_movie_libraries,
-        local_show_libraries=local_show_libraries,
-        friend_server_names=friend_server_names
+        local_movie_libraries=get_library_sections(plex, 'movie'),
+        local_show_libraries=get_library_sections(plex, 'show'),
+        friend_server_names=[resource.name for resource in account.resources()]
     )
 
 # Route pour servir les images de jaquette sans exposer le token Plex

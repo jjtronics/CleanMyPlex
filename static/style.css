@@ -214,7 +214,6 @@ table tbody + tbody {
     border-top: 2px solid #dee2e6;
 }
 
-
 form.inline-form {
     display: inline;
     margin: 0;
@@ -223,7 +222,6 @@ form.inline-form {
 .btn-sm {
     white-space: nowrap;
 }
-
 
 .inline-form {
     display: flex;
@@ -245,7 +243,6 @@ form.inline-form {
     text-decoration: underline; /* Ajoute un soulignement au survol */
 }
 
-
 .btn-warning {
     color: #fff;
     background-color: #fd7e14;
@@ -256,4 +253,32 @@ form.inline-form {
     color: #fff;
     background-color: #e8590c;
     border-color: #e8590c;
+}
+
+/* Ajustements de la largeur des colonnes de la table */
+
+table th.rating,
+table td.rating,
+table th.plex_rating,
+table td.plex_rating,
+table th.view_count,
+table td.view_count {
+    width: 50px; /* Colonnes réduites pour les valeurs numériques */
+}
+
+table th.local_path,
+table td.local_path {
+    max-width: 150px; /* Limite de largeur avec text-overflow */
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+table th.added_at,
+table td.added_at,
+table th.release_date,
+table td.release_date,
+table th.file_size,
+table td.file_size {
+    width: 100px; /* Colonnes ajustées pour les dates et tailles */
+    white-space: nowrap; /* Empêche la rupture de ligne */
 }

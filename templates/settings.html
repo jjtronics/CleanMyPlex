@@ -5,7 +5,7 @@
 {% block header_title %}Paramètres{% endblock %}
 
 {% block content %}
-    <form method="post">
+    <form method="post" id="settings-form">
         <div class="form-group">
             <label for="PLEX_URL">Plex URL:</label>
             <input type="text" class="form-control" id="PLEX_URL" name="PLEX_URL" value="{{ config.PLEX_URL }}" required>
@@ -13,6 +13,8 @@
         <div class="form-group">
             <label for="PLEX_TOKEN">Plex Token:</label>
             <input type="text" class="form-control" id="PLEX_TOKEN" name="PLEX_TOKEN" value="{{ config.PLEX_TOKEN }}" required>
+            <button type="button" class="btn btn-secondary" id="test-token">Tester le token</button>
+            <div id="token-test-result" style="margin-top: 10px;"></div>
         </div>
         <div class="form-group">
             <label for="PLEX_USERNAME">Plex Username:</label>
@@ -21,6 +23,8 @@
         <div class="form-group">
             <label for="PLEX_PASSWORD">Plex Password:</label>
             <input type="password" class="form-control" id="PLEX_PASSWORD" name="PLEX_PASSWORD" value="{{ config.PLEX_PASSWORD }}" required>
+            <button type="button" class="btn btn-secondary" id="test-login">Tester le login</button>
+            <div id="login-test-result" style="margin-top: 10px;"></div>
         </div>
         
         <div class="form-group">
@@ -30,13 +34,47 @@
                     <option value="{{ server }}" {% if server == config.FRIEND_SERVER_NAME %}selected{% endif %}>{{ server }}</option>
                 {% endfor %}
             </select>
-            <small class="form-text text-muted">Sélectionnez le serveur Plex de votre ami.</small>
         </div>
 
-        <div class="form-group">
-            <label for="LOG_FILE_PATH">Chemin du fichier de log:</label>
-            <input type="text" class="form-control" id="LOG_FILE_PATH" name="LOG_FILE_PATH" value="{{ config.LOG_FILE_PATH }}" required>
-        </div>
         <button type="submit" class="btn btn-primary">Mettre à jour les paramètres</button>
     </form>
+
+    <script>
+        // Test du token
+        document.getElementById('test-token').addEventListener('click', function() {
+            const token = document.getElementById('PLEX_TOKEN').value;
+            fetch('/test_token', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({ PLEX_TOKEN: token }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                const resultDiv = document.getElementById('token-test-result');
+                resultDiv.textContent = data.message;
+                resultDiv.className = data.status === 'success' ? 'alert alert-success' : 'alert alert-danger';
+            });
+        });
+
+        // Test du login/password
+        document.getElementById('test-login').addEventListener('click', function() {
+            const username = document.getElementById('PLEX_USERNAME').value;
+            const password = document.getElementById('PLEX_PASSWORD').value;
+            fetch('/test_login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({ PLEX_USERNAME: username, PLEX_PASSWORD: password }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                const resultDiv = document.getElementById('login-test-result');
+                resultDiv.textContent = data.message;
+                resultDiv.className = data.status === 'success' ? 'alert alert-success' : 'alert alert-danger';
+            });
+        });
+    </script>
 {% endblock %}
