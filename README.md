@@ -4,6 +4,13 @@
 
 CleanMyPlex est une application web permettant de gérer et nettoyer vos bibliothèques Plex. Elle permet également de faire une comparaison entre deux serveurs plex pour trouver les doublons.
 
+## Table des matières
+- [Fonctionnalités](#fonctionnalités)
+- [Prérequis](#prérequis)
+- [Installation](#installation)
+- [Scripts Systemd](#scripts-systemd)
+- [Contribution](#contribution)
+
 ## Fonctionnalités
 
 - Nettoyage de vos films/séries
