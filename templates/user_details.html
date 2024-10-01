@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Détails de l'utilisateur - {{ user.username }}{% endblock %}
+
+{% block content %}
+<h2>Détails de l'utilisateur : {{ user.username }}</h2>
+<div class="row">
+    <div class="col-md-6">
+        <p><strong>Nom d'utilisateur :</strong> {{ user.username }}</p>
+        <p><strong>Adresse email :</strong> {{ user.email }}</p>
+        <p><strong>Titre complet :</strong> {{ user.title }}</p>
+        <p><strong>ID utilisateur :</strong> {{ user.userID }}</p>
+        <p><strong>Membre de Plex Home :</strong> {{ user.homeUser }}</p>
+        <p><strong>Adresse IP :</strong> {{ user.publicAddress }}</p>
+        <p><strong>Type de compte :</strong> {{ user.subscriptionType }}</p>
+        <p><strong>Actif :</strong> {{ user.is_active }}</p>
+    </div>
+</div>
+
+<a href="{{ url_for('manage_users') }}" class="btn btn-secondary">Retour à la liste des utilisateurs</a>
+{% endblock %}
