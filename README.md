@@ -11,6 +11,11 @@ CleanMyPlex est une application web permettant de gérer et nettoyer vos bibliot
 - [Scripts Systemd](#scripts-systemd)
 - [Contribution](#contribution)
 
+## Statut
+![Version](https://img.shields.io/github/v/release/jjtronics/cleanmyplex)
+![Issues](https://img.shields.io/github/issues/jjtronics/cleanmyplex)
+![Forks](https://img.shields.io/github/forks/jjtronics/cleanmyplex)
+
 ## Fonctionnalités
 
 - Nettoyage de vos films/séries
@@ -70,7 +75,7 @@ CleanMyPlex est une application web permettant de gérer et nettoyer vos bibliot
    ```sh
    sudo chown -R cleanmyplex:cleanmyplex /opt/cleanmyplex
 
-Scripts Systemd
+## Scripts Systemd
 
 Pour exécuter l’application automatiquement au démarrage, créez un script systemd :
 
@@ -101,6 +106,6 @@ Pour exécuter l’application automatiquement au démarrage, créez un script s
    sudo systemctl enable cleanmyplex.service
    sudo systemctl start cleanmyplex.service
 
-Contribution
+## Contribution
 
 Les contributions sont les bienvenues ! Veuillez ouvrir une issue ou soumettre une pull request sur GitHub.
