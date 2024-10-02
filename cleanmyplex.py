@@ -31,8 +31,14 @@ CSV_FILE_SERIES = 'unwatched_series.csv'
 CSV_FILE_COMMON_MOVIES = 'common_movies.csv'
 CSV_FILE_COMMON_SERIES = 'common_series.csv'
 
-plex = PlexServer(PLEX_URL, PLEX_TOKEN)
-account = MyPlexAccount(PLEX_USERNAME, PLEX_PASSWORD)
+# Essayer de se connecter au serveur Plex
+try:
+    plex = PlexServer(PLEX_URL, PLEX_TOKEN)
+    account = MyPlexAccount(PLEX_USERNAME, PLEX_PASSWORD)
+except Exception as e:
+    plex = None
+    account = None
+    flash(f"Erreur lors de la connexion au serveur Plex : {e}", 'danger')
 
 # Variables globales pour suivre les tâches en arrière-plan
 tasks = {}
