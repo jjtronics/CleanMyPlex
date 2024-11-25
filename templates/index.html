@@ -9,37 +9,43 @@
         <a href="{{ url_for('duplicates') }}" class="list-group-item list-group-item-action">Vérifier les doublons entre serveurs Plex</a>
         <a href="{{ url_for('manage_users') }}" class="list-group-item list-group-item-action">Gestion des utilisateurs</a>
     </div>
+
+    {% if tasks_list %}
+        <div id="tasksStatus">
+            {% for task_id in tasks_list %}
+                <div id="task_{{ task_id }}">
+                    <p>Tâche en cours : <span class="task-message">Initialisation...</span></p>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
 {% endblock %}
 
 {% block scripts %}
-{% if tasks_list %}
-<script>
-    var tasks = {{ tasks_list|tojson }};
-    function checkTaskStatus() {
-        if (tasks.length === 0) return; // Pas de tâches à vérifier
-        tasks.forEach(function(task_id, index) {
-            $.ajax({
-                url: "{{ url_for('task_status', task_id='') }}" + task_id,
-                method: 'GET',
-                success: function(data) {
-                    if (data.status === 'completed' || data.status === 'failed') {
-                        // Afficher le message
-                        var alertClass = data.status === 'completed' ? 'success' : 'danger';
-                        var messageHtml = '<div class="alert alert-' + alertClass + '">' + data.message + '</div>';
-                        $('#notifications').append(messageHtml);
-                        // Supprimer la tâche de la liste
-                        tasks.splice(index, 1);
-                    }
+    {% if tasks_list %}
+    <script>
+        $(document).ready(function() {
+            {% for task_id in tasks_list %}
+                function checkTaskStatus_{{ task_id }}() {
+                    $.getJSON("{{ url_for('task_status', task_id=task_id) }}", function(data) {
+                        if (data.status === 'running') {
+                            $("#task_{{ task_id }} .task-message").text(data.message);
+                            setTimeout(checkTaskStatus_{{ task_id }}, 2000);
+                        } else {
+                            $("#task_{{ task_id }} .task-message").text(data.message);
+                            if (data.status === 'completed') {
+                                $("#task_{{ task_id }}").addClass('alert alert-success');
+                            } else if (data.status === 'failed') {
+                                $("#task_{{ task_id }}").addClass('alert alert-danger');
+                            } else if (data.status === 'completed_with_errors') {
+                                $("#task_{{ task_id }}").addClass('alert alert-warning');
+                            }
+                        }
+                    });
                 }
-            });
+                checkTaskStatus_{{ task_id }}();
+            {% endfor %}
         });
-        if (tasks.length > 0) {
-            setTimeout(checkTaskStatus, 5000); // Vérifier à nouveau après 5 secondes
-        }
-    }
-    $(document).ready(function() {
-        checkTaskStatus();
-    });
-</script>
-{% endif %}
+    </script>
+    {% endif %}
 {% endblock %}

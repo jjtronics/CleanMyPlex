@@ -31,7 +31,7 @@ CSV_FILE_SERIES = 'unwatched_series.csv'
 CSV_FILE_COMMON_MOVIES = 'common_movies.csv'
 CSV_FILE_COMMON_SERIES = 'common_series.csv'
 
-plex = PlexServer(PLEX_URL, PLEX_TOKEN)
+plex = PlexServer(PLEX_URL, PLEX_TOKEN, timeout=300)
 account = MyPlexAccount(PLEX_USERNAME, PLEX_PASSWORD)
 
 # Variables globales pour suivre les tâches en arrière-plan
@@ -40,16 +40,15 @@ tasks_lock = threading.Lock()
 
 def get_active_sessions():
     try:
-        sessions = plex.sessions()  # Récupère toutes les sessions actives
+        sessions = plex.sessions()
         session_data = []
 
         for session in sessions:
-            # Vérification des informations disponibles dans les sessions
             last_active = session.startedAt.strftime('%Y-%m-%d %H:%M:%S') if hasattr(session, 'startedAt') and session.startedAt else 'Inconnu'
             session_info = {
                 'username': session.usernames[0] if session.usernames else 'Inconnu',
                 'publicAddress': session.players[0].address if session.players else 'N/A',
-                'last_active': last_active  # Affiche l'heure de début de la session si disponible
+                'last_active': last_active
             }
             session_data.append(session_info)
 
@@ -61,11 +60,8 @@ def get_active_sessions():
 def get_view_history(user):
     try:
         view_history = []
-        # Parcourt toutes les bibliothèques de ton serveur
         for section in plex.library.sections():
-            # Parcourt tous les éléments dans chaque bibliothèque
             for item in section.all():
-                # Vérifie si l'utilisateur a vu cet élément
                 if item.viewCount > 0:
                     view_history.append({
                         'title': item.title,
@@ -80,26 +76,19 @@ def get_view_history(user):
 def get_last_activity(user):
     try:
         last_activity = None
-        
-        # Parcourt toutes les bibliothèques de ton serveur
+
         for section in plex.library.sections():
-            # Parcourt tous les éléments dans chaque bibliothèque
             for item in section.all():
-                # Filtrer les historiques qui appartiennent à cet utilisateur
                 history = item.history()
                 for view in history:
-                    # Utiliser 'view.user.username' pour vérifier si c'est l'utilisateur correct
                     if view.user and view.user.username == user.username:
-                        # Si l'utilisateur a vu cet élément, on vérifie la date de l'activité
                         if not last_activity or view.viewedAt > last_activity:
                             last_activity = view.viewedAt
-        
-        # Retourne la dernière date d'activité si elle existe, sinon 'Inconnu'
+
         return last_activity.strftime('%Y-%m-%d %H:%M:%S') if last_activity else 'Inconnu'
     except Exception as e:
         flash(f"Erreur lors de la récupération de la dernière activité pour l'utilisateur {user.username} : {e}", 'danger')
         return 'Inconnu'
-
 
 # Fonction pour récupérer dynamiquement les sections de bibliothèque
 def get_library_sections(plex_server, media_type):
@@ -111,11 +100,9 @@ def get_library_sections(plex_server, media_type):
     else:
         return []
 
-# Fonction pour comparer les bibliothèques et générer un CSV des doublons
 def compare_libraries(library_names_local, library_names_friend, media_type):
     friend_server = account.resource(FRIEND_SERVER_NAME).connect()
 
-    # Récupérer les bibliothèques sélectionnées ou toutes
     if "ALL" in library_names_friend:
         friend_libraries = friend_server.library.sections()
         if media_type == 'movie':
@@ -142,7 +129,6 @@ def compare_libraries(library_names_local, library_names_friend, media_type):
             flash(f"Erreur lors de l'accès à une de vos bibliothèques : {e}", 'danger')
             local_library_list = []
 
-    # Créer des dictionnaires pour un accès rapide par titre
     friend_items = {}
     for lib in friend_library_list:
         for item in lib.all():
@@ -156,44 +142,35 @@ def compare_libraries(library_names_local, library_names_friend, media_type):
             if title in friend_items:
                 friend_item = friend_items[title]
 
-                # Récupérer les tailles de fichiers
                 if media_type == 'movie':
-                    # Taille locale
                     local_file_size_gb = sum(
                         media_part.size for media in local_item.media for media_part in media.parts
                     ) / (1024 ** 3)
-                    # Taille distante
                     remote_file_size_gb = sum(
                         media_part.size for media in friend_item.media for media_part in media.parts
                     ) / (1024 ** 3)
-                    # Pas de nombre d'épisodes pour les films
                     number_of_local_episodes = None
                     number_of_remote_episodes = None
                 elif media_type == 'show':
-                    # Taille locale
                     local_file_size_gb = sum(
                         media_part.size
                         for episode in local_item.episodes()
                         for media in episode.media
                         for media_part in media.parts
                     ) / (1024 ** 3)
-                    # Taille distante
                     remote_file_size_gb = sum(
                         media_part.size
                         for episode in friend_item.episodes()
                         for media in episode.media
                         for media_part in media.parts
                     ) / (1024 ** 3)
-                    # Nombre d'épisodes
                     number_of_local_episodes = len(local_item.episodes())
                     number_of_remote_episodes = len(friend_item.episodes())
                 else:
-                    continue  # Type de média inconnu
+                    continue
 
-                # Déterminer la plus grande taille de fichier
                 largest_file_size_gb = max(local_file_size_gb, remote_file_size_gb)
 
-                # Récupérer d'autres informations
                 added_at = local_item.addedAt.strftime('%Y-%m-%d') if local_item.addedAt else 'N/A'
                 release_date = local_item.originallyAvailableAt.strftime('%Y-%m-%d') if local_item.originallyAvailableAt else 'N/A'
                 rating = local_item.audienceRating if local_item.audienceRating else 0
@@ -204,31 +181,26 @@ def compare_libraries(library_names_local, library_names_friend, media_type):
                 else:
                     plex_rating = 0
 
-                # Nombre de visionnages et chemin local
                 if media_type == 'movie':
                     view_count = local_item.viewCount if hasattr(local_item, 'viewCount') else 0
                     local_file_path = local_item.media[0].parts[0].file if local_item.media and local_item.media[0].parts else 'N/A'
                 elif media_type == 'show':
                     view_count = sum(episode.viewCount for episode in local_item.episodes() if hasattr(episode, 'viewCount'))
-                    local_file_path = 'N/A'  # Vous pouvez personnaliser cela si nécessaire
+                    local_file_path = 'N/A'
                 else:
                     view_count = 0
                     local_file_path = 'N/A'
 
-                # Récupérer le synopsis, les genres, les réalisateurs, les acteurs
                 summary = local_item.summary if local_item.summary else 'N/A'
                 genres = ', '.join([genre.tag for genre in local_item.genres]) if hasattr(local_item, 'genres') else 'N/A'
                 directors = ', '.join([director.tag for director in local_item.directors]) if hasattr(local_item, 'directors') else 'N/A'
                 actors = ', '.join([actor.tag for actor in local_item.actors]) if hasattr(local_item, 'actors') else 'N/A'
 
-                # Récupérer l'URL de la jaquette
                 if hasattr(local_item, 'thumb'):
-                    # Construire manuellement l'URL vers la route 'get_poster'
                     poster_url = f"/poster/{local_item.ratingKey}"
                 else:
                     poster_url = 'N/A'
 
-                # Créer l'entrée dupliquée
                 duplicate_entry = {
                     'title': title,
                     'rating': rating,
@@ -249,7 +221,6 @@ def compare_libraries(library_names_local, library_names_friend, media_type):
                     'actors': actors
                 }
 
-                # Inclure les nombres d'épisodes uniquement pour les séries
                 if media_type == 'show':
                     duplicate_entry['number_of_local_episodes'] = number_of_local_episodes
                     duplicate_entry['number_of_remote_episodes'] = number_of_remote_episodes
@@ -259,7 +230,6 @@ def compare_libraries(library_names_local, library_names_friend, media_type):
     df = pd.DataFrame(duplicates)
     output_file = CSV_FILE_COMMON_MOVIES if media_type == 'movie' else CSV_FILE_COMMON_SERIES
 
-    # Définir l'ordre des colonnes
     if media_type == 'movie':
         columns_order = [
             'title', 'rating', 'plex_rating', 'view_count', 'local_path',
@@ -268,7 +238,7 @@ def compare_libraries(library_names_local, library_names_friend, media_type):
             'poster_url',
             'summary', 'genres', 'directors', 'actors'
         ]
-    else:  # Pour les séries
+    else:
         columns_order = [
             'title', 'rating', 'plex_rating', 'view_count', 'local_path',
             'added_at', 'release_date',
@@ -279,34 +249,24 @@ def compare_libraries(library_names_local, library_names_friend, media_type):
         ]
     df = df[columns_order]
 
-    # Calculer l'espace total économisé
     total_space_saved = sum(float(size.replace(' Go', '')) for size in df['largest_file_size'])
 
     df.to_csv(output_file, index=False)
     return df, output_file, len(duplicates), total_space_saved
 
-# Fonction pour générer le CSV
 def generate_csv(library_names, csv_file, media_type):
     if os.path.exists(csv_file):
         existing_df = pd.read_csv(csv_file, encoding='utf-8', delimiter=',', quotechar='"')
-        # Convertir 'file_size' en numérique en supprimant ' Go'
         existing_df['file_size'] = existing_df['file_size'].replace('N/A', '0')
         existing_df['file_size'] = existing_df['file_size'].str.replace(' Go', '', regex=False).astype(float)
     else:
-        if media_type == 'movie':
-            columns = ['title', 'rating', 'plex_rating', 'view_count', 'local_path',
-                       'added_at', 'release_date', 'file_size', 'Bibliothèque', 'Action',
-                       'poster_url',
-                       'summary', 'genres', 'directors', 'actors']
-        else:
-            columns = ['title', 'rating', 'plex_rating', 'view_count', 'local_path',
-                       'added_at', 'release_date', 'file_size', 'Bibliothèque', 'Action',
-                       'poster_url',
-                       'summary', 'genres', 'directors', 'actors']
+        columns = [
+            'title', 'ratingKey', 'rating', 'plex_rating', 'view_count', 'local_path',
+            'added_at', 'release_date', 'file_size', 'Bibliothèque', 'Action',
+            'poster_url', 'summary', 'genres', 'directors', 'actors'
+        ]
         existing_df = pd.DataFrame(columns=columns)
 
-    # Récupérer toutes les bibliothèques sélectionnées
-    libraries = []
     if "ALL" in library_names:
         if media_type == 'movie':
             libraries = [section.title for section in plex.library.sections() if section.type == 'movie']
@@ -334,26 +294,23 @@ def generate_csv(library_names, csv_file, media_type):
             else:
                 plex_rating = 0
 
-            # Récupérer le synopsis, les genres, les réalisateurs, les acteurs
             summary = item.summary if item.summary else 'N/A'
             genres = ', '.join([genre.tag for genre in item.genres]) if hasattr(item, 'genres') else 'N/A'
             directors = ', '.join([director.tag for director in item.directors]) if hasattr(item, 'directors') else 'N/A'
             actors = ', '.join([actor.tag for actor in item.actors]) if hasattr(item, 'actors') else 'N/A'
 
-            # Récupérer l'URL de la jaquette
             if hasattr(item, 'thumb'):
-                # Construire manuellement l'URL vers la route 'get_poster'
                 poster_url = f"/poster/{item.ratingKey}"
             else:
                 poster_url = 'N/A'
 
-            # Nombre de visionnages et chemin local
             if item.TYPE == 'movie':
                 view_count = item.viewCount if hasattr(item, 'viewCount') else 0
                 local_path = item.media[0].parts[0].file if item.media and item.media[0].parts else 'N/A'
                 file_size_gb = sum(media_part.size for media in item.media for media_part in media.parts) / (1024 ** 3)
                 new_items.append({
                     'title': item.title,
+                    'ratingKey': item.ratingKey,
                     'rating': rating,
                     'plex_rating': plex_rating,
                     'view_count': view_count,
@@ -372,7 +329,7 @@ def generate_csv(library_names, csv_file, media_type):
 
             elif item.TYPE == 'show':
                 view_count = sum(episode.viewCount for episode in item.episodes() if hasattr(episode, 'viewCount'))
-                local_path = 'N/A'  # Vous pouvez personnaliser cela si nécessaire
+                local_path = 'N/A'
                 file_size_gb = sum(
                     media_part.size
                     for episode in item.episodes()
@@ -381,6 +338,7 @@ def generate_csv(library_names, csv_file, media_type):
                 ) / (1024 ** 3)
                 new_items.append({
                     'title': item.title,
+                    'ratingKey': item.ratingKey,
                     'rating': rating,
                     'plex_rating': plex_rating,
                     'view_count': view_count,
@@ -406,25 +364,24 @@ def generate_csv(library_names, csv_file, media_type):
     elif not new_df.empty:
         combined_df = new_df
     else:
-        combined_df = pd.DataFrame(columns=columns)
+        combined_df = pd.DataFrame(columns=[
+            'title', 'ratingKey', 'rating', 'plex_rating', 'view_count', 'local_path',
+            'added_at', 'release_date', 'file_size', 'Bibliothèque', 'Action',
+            'poster_url', 'summary', 'genres', 'directors', 'actors'
+        ])
 
     combined_df['Action'] = combined_df['Action'].fillna('')
-    combined_df['file_size'] = combined_df['file_size'].fillna(0.00)
     combined_df['file_size'] = pd.to_numeric(combined_df['file_size'], errors='coerce').fillna(0)
     combined_df = combined_df.sort_values(by=['added_at'], ascending=True)
 
-    # Formater 'file_size' avant d'écrire dans le CSV
     combined_df['file_size'] = combined_df['file_size'].apply(lambda x: f"{x:.2f} Go")
 
-    # Définir l'ordre des colonnes
     columns_order = [
-        'title', 'rating', 'plex_rating', 'view_count', 'local_path',
+        'title', 'ratingKey', 'rating', 'plex_rating', 'view_count', 'local_path',
         'added_at', 'release_date', 'file_size', 'Bibliothèque', 'Action',
-        'poster_url',
-        'summary', 'genres', 'directors', 'actors'
+        'poster_url', 'summary', 'genres', 'directors', 'actors'
     ]
     combined_df = combined_df[columns_order]
-
     combined_df.to_csv(csv_file, index=False)
     return combined_df, csv_file
 
@@ -442,35 +399,71 @@ def generate_csv_thread(library_names, csv_file, media_type, task_id):
             tasks[task_id]['message'] = f"Erreur lors de la génération du CSV : {e}"
         print(f"Erreur lors de la génération du CSV : {e}")
 
-def delete_items_from_csv(csv_file):
-    if not os.path.exists(csv_file):
-        flash('Le fichier CSV spécifié n\'existe pas.', 'danger')
-        return
+# Nouvelle fonction pour la suppression en tâche de fond
+def delete_items_from_csv_thread(csv_file, task_id):
+    try:
+        if not os.path.exists(csv_file):
+            with tasks_lock:
+                tasks[task_id]['status'] = 'failed'
+                tasks[task_id]['message'] = f"Le fichier CSV {csv_file} n'existe pas."
+            return
 
-    df = pd.read_csv(csv_file)
-    items_to_delete = df[df['Action'] == 'D']
+        df = pd.read_csv(csv_file)
+        items_to_delete = df[df['Action'] == 'D']
 
-    for index, row in items_to_delete.iterrows():
-        try:
-            local_path = row['local_path']
-            if local_path != 'N/A' and os.path.exists(local_path):
-                os.remove(local_path)
-                flash(f"{row['title']} supprimé avec succès.", 'success')
-                df.drop(index, inplace=True)
+        total_items = len(items_to_delete)
+        deleted_items = 0
+
+        for index, row in items_to_delete.iterrows():
+            try:
+                rating_key = row.get('ratingKey')
+                if pd.notna(rating_key):
+                    item = plex.fetchItem(int(rating_key))
+                    item.delete()
+                    df.drop(index, inplace=True)
+                    deleted_items += 1
+
+                    with tasks_lock:
+                        tasks[task_id]['progress'] = f"{deleted_items}/{total_items} éléments supprimés."
+                else:
+                    with tasks_lock:
+                        tasks[task_id]['errors'].append(f"Clé de notation invalide pour {row['title']}.")
+            except Exception as e:
+                with tasks_lock:
+                    tasks[task_id]['errors'].append(f"Erreur lors de la suppression de {row['title']}: {e}")
+
+        df.to_csv(csv_file, index=False)
+
+        with tasks_lock:
+            if tasks[task_id]['errors']:
+                tasks[task_id]['status'] = 'completed_with_errors'
+                tasks[task_id]['message'] = f"Suppression terminée avec des erreurs. {deleted_items}/{total_items} éléments supprimés."
             else:
-                flash(f"Chemin local invalide pour {row['title']}.", 'danger')
-        except Exception as e:
-            flash(f"Erreur lors de la suppression de {row['title']}: {e}", 'danger')
+                tasks[task_id]['status'] = 'completed'
+                tasks[task_id]['message'] = f"Suppression terminée avec succès. {deleted_items} éléments supprimés."
 
-    df.to_csv(csv_file, index=False)
+    except Exception as e:
+        with tasks_lock:
+            tasks[task_id]['status'] = 'failed'
+            tasks[task_id]['message'] = f"Erreur lors de la suppression : {e}"
+
+def compare_libraries_thread(local_library_names, friend_library_names, media_type, task_id):
+    try:
+        df, output_file, num_items, total_space_saved_gb = compare_libraries(local_library_names, friend_library_names, media_type)
+        with tasks_lock:
+            tasks[task_id]['status'] = 'completed'
+            tasks[task_id]['message'] = f"CSV {output_file} généré avec succès."
+    except Exception as e:
+        with tasks_lock:
+            tasks[task_id]['status'] = 'failed'
+            tasks[task_id]['message'] = f"Erreur lors de la comparaison des bibliothèques : {e}"
 
 @app.route('/test_token', methods=['POST'])
 def test_token():
     try:
         test_token = request.form['PLEX_TOKEN']
         plex_test = PlexServer(config['PLEX_URL'], test_token)
-        # Test de la connexion
-        plex_test.library.sections()  # Si ceci échoue, le token est incorrect
+        plex_test.library.sections()
         return jsonify({'status': 'success', 'message': 'Connexion réussie avec ce token !'})
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Erreur : {str(e)}'})
@@ -480,9 +473,8 @@ def test_login():
     try:
         plex_username = request.form['PLEX_USERNAME']
         plex_password = request.form['PLEX_PASSWORD']
-        # Test de la connexion via MyPlexAccount
         account_test = MyPlexAccount(plex_username, plex_password)
-        account_test.devices()  # Si ceci échoue, les identifiants sont incorrects
+        account_test.devices()
         return jsonify({'status': 'success', 'message': 'Connexion réussie avec ces identifiants !'})
     except Exception as e:
         return jsonify({'status': 'error', 'message': f'Erreur : {str(e)}'})
@@ -490,15 +482,12 @@ def test_login():
 @app.route('/manage_users')
 def manage_users():
     try:
-        users = account.users()  # Récupère les utilisateurs partagés
-        sessions = get_active_sessions()  # Récupère les sessions actives
+        users = account.users()
+        sessions = get_active_sessions()
         user_data = []
 
         for user in users:
-            # Vérifie s'il existe une session active pour cet utilisateur
             session_info = next((session for session in sessions if session['username'] == user.username), None)
-
-            # Actif ou non
             is_active = "Oui" if session_info else "Non"
 
             user_info = {
@@ -508,7 +497,7 @@ def manage_users():
                 'userID': user.id,
                 'homeUser': 'Oui' if user.home else 'Non',
                 'role': 'Invité',
-                'is_active': is_active,  # Oui ou Non selon la session active
+                'is_active': is_active,
                 'publicAddress': session_info['publicAddress'] if session_info else 'N/A',
             }
             user_data.append(user_info)
@@ -526,7 +515,6 @@ def user_details(username):
             flash(f"Utilisateur {username} non trouvé", 'danger')
             return redirect(url_for('manage_users'))
 
-        # Récupération des sessions actives pour l'adresse IP et la dernière activité
         sessions = get_active_sessions()
         session_info = next((session for session in sessions if session['username'] == user.username), None)
 
@@ -583,17 +571,14 @@ def delete_csv():
 
 @app.route('/clean', methods=['GET', 'POST'])
 def clean():
-    # Récupérer dynamiquement les noms des bibliothèques
     local_movie_libraries = get_library_sections(plex, 'movie')
     local_show_libraries = get_library_sections(plex, 'show')
 
-    # Ajouter l'option "ALL" si elle n'existe pas déjà
     if "ALL" not in local_movie_libraries:
         local_movie_libraries.insert(0, "ALL")
     if "ALL" not in local_show_libraries:
         local_show_libraries.insert(0, "ALL")
 
-    # Obtenir les dates de modification
     films_csv_mtime = time.ctime(os.path.getmtime(CSV_FILE_FILMS)) if os.path.exists(CSV_FILE_FILMS) else None
     series_csv_mtime = time.ctime(os.path.getmtime(CSV_FILE_SERIES)) if os.path.exists(CSV_FILE_SERIES) else None
 
@@ -635,7 +620,6 @@ def clean():
 
 @app.route('/duplicates', methods=['GET', 'POST'])
 def duplicates():
-    # Récupérer dynamiquement les noms des bibliothèques
     try:
         friend_server = account.resource(FRIEND_SERVER_NAME).connect()
         friend_movie_libraries = get_library_sections(friend_server, 'movie')
@@ -645,11 +629,9 @@ def duplicates():
         friend_movie_libraries = []
         friend_show_libraries = []
 
-    # Récupérer les bibliothèques locales
     local_movie_libraries = get_library_sections(plex, 'movie')
     local_show_libraries = get_library_sections(plex, 'show')
 
-    # Ajouter l'option "ALL" si elle n'existe pas déjà
     for lib_list in [friend_movie_libraries, friend_show_libraries, local_movie_libraries, local_show_libraries]:
         if "ALL" not in lib_list:
             lib_list.insert(0, "ALL")
@@ -657,7 +639,6 @@ def duplicates():
     common_movies_csv_exists = os.path.exists(CSV_FILE_COMMON_MOVIES)
     common_series_csv_exists = os.path.exists(CSV_FILE_COMMON_SERIES)
 
-    # Obtenir les dates de modification
     common_movies_csv_mtime = time.ctime(os.path.getmtime(CSV_FILE_COMMON_MOVIES)) if common_movies_csv_exists else None
     common_series_csv_mtime = time.ctime(os.path.getmtime(CSV_FILE_COMMON_SERIES)) if common_series_csv_exists else None
 
@@ -699,19 +680,6 @@ def duplicates():
         common_series_csv_mtime=common_series_csv_mtime
     )
 
-def compare_libraries_thread(local_library_names, friend_library_names, media_type, task_id):
-    try:
-        df, output_file, num_items, total_space_saved_gb = compare_libraries(local_library_names, friend_library_names, media_type)
-        with tasks_lock:
-            tasks[task_id]['status'] = 'completed'
-            tasks[task_id]['message'] = f"CSV {output_file} généré avec succès."
-        print(f"CSV {output_file} généré avec succès.")
-    except Exception as e:
-        with tasks_lock:
-            tasks[task_id]['status'] = 'failed'
-            tasks[task_id]['message'] = f"Erreur lors de la comparaison des bibliothèques : {e}"
-        print(f"Erreur lors de la comparaison des bibliothèques : {e}")
-
 @app.route('/task_status/<task_id>')
 def task_status(task_id):
     with tasks_lock:
@@ -722,23 +690,23 @@ def task_status(task_id):
 def view_csv(csv_file):
     if os.path.exists(csv_file):
         df = pd.read_csv(csv_file)
-        df = df.fillna('N/A')  # Remplacer les NaN par 'N/A'
+        df = df.fillna('N/A')
     else:
         flash('Le fichier CSV spécifié n\'existe pas.', 'danger')
         return redirect(url_for('index'))
 
-    # Convertir les colonnes de date en datetime, si elles existent
+    if 'ratingKey' not in df.columns:
+        df['ratingKey'] = 'N/A'
+
     date_columns = ['added_at', 'release_date']
     for col in date_columns:
         if col in df.columns:
             df[col] = pd.to_datetime(df[col], format='%Y-%m-%d', errors='coerce')
 
-    # Récupérer les listes uniques pour les filtres déroulants
-    unique_libraries = sorted(df['Bibliothèque'].unique().tolist())
-    unique_actions = sorted(df['Action'].dropna().unique().tolist())
+    unique_libraries = sorted(df['Bibliothèque'].unique().tolist()) if 'Bibliothèque' in df.columns else []
+    unique_actions = sorted(df['Action'].dropna().unique().tolist()) if 'Action' in df.columns else []
 
     if request.method == 'POST':
-        # Mise à jour des actions (A pour Archiver, D pour Supprimer)
         for index, row in df.iterrows():
             action = request.form.get(f'action_{index}')
             if action in ['A', 'D']:
@@ -772,13 +740,22 @@ def view_existing_csv(library):
 
     return redirect(url_for('view_csv', csv_file=csv_file))
 
-@app.route('/process_csv/<csv_file>', methods=['POST'])
+@app.route('/process_csv/<path:csv_file>', methods=['POST'])
 def process_csv(csv_file):
-    delete_items_from_csv(csv_file)
-    flash('Le CSV a été traité avec succès.', 'success')
-    return redirect(url_for('view_csv', csv_file=csv_file))
+    task_id = str(uuid4())
+    with tasks_lock:
+        tasks[task_id] = {
+            'status': 'running',
+            'message': 'La suppression a démarré.',
+            'progress': '0%',
+            'errors': []
+        }
+    threading.Thread(target=delete_items_from_csv_thread, args=(csv_file, task_id)).start()
+    flash('La suppression a démarré en arrière-plan.', 'info')
+    return redirect(url_for('index', tasks=task_id))
+    pass
 
-@app.route('/download/<csv_file>')
+@app.route('/download/<path:csv_file>')
 def download_csv(csv_file):
     return send_from_directory(directory=os.getcwd(), path=csv_file, as_attachment=True)
 
@@ -786,10 +763,9 @@ def download_csv(csv_file):
 def settings():
     global PLEX_URL, PLEX_TOKEN, PLEX_USERNAME, PLEX_PASSWORD
     global FRIEND_SERVER_NAME
-    global plex, account  # Réinitialiser les instances
+    global plex, account
 
     if request.method == 'POST':
-        # Utilisation de request.form.get() pour éviter les erreurs KeyError
         config['PLEX_URL'] = request.form.get('PLEX_URL')
         config['PLEX_TOKEN'] = request.form.get('PLEX_TOKEN')
         config['PLEX_USERNAME'] = request.form.get('PLEX_USERNAME')
@@ -799,21 +775,18 @@ def settings():
         with open('config.json', 'w') as config_file:
             json.dump(config, config_file, indent=4)
 
-        # Mettre à jour les variables globales
         PLEX_URL = config['PLEX_URL']
         PLEX_TOKEN = config['PLEX_TOKEN']
         PLEX_USERNAME = config['PLEX_USERNAME']
         PLEX_PASSWORD = config['PLEX_PASSWORD']
         FRIEND_SERVER_NAME = config['FRIEND_SERVER_NAME']
 
-        # Réinitialiser PlexServer et MyPlexAccount
         plex = PlexServer(PLEX_URL, PLEX_TOKEN)
         account = MyPlexAccount(PLEX_USERNAME, PLEX_PASSWORD)
 
         flash('Paramètres mis à jour avec succès.', 'success')
         return redirect(url_for('index'))
 
-    # Si GET, afficher la page des paramètres avec les valeurs actuelles
     return render_template(
         'settings.html',
         config=config,
@@ -822,7 +795,6 @@ def settings():
         friend_server_names=[resource.name for resource in account.resources()]
     )
 
-# Route pour servir les images de jaquette sans exposer le token Plex
 @app.route('/poster/<int:rating_key>')
 def get_poster(rating_key):
     try:

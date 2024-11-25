@@ -1,3 +1,4 @@
+<!-- templates/view_csv.html -->
 {% extends "base.html" %}
 
 {% block title %}CSV - {{ csv_file }}{% endblock %}
@@ -67,8 +68,8 @@
                             {% for title in titles %}
                                 {% if title != 'poster_url' and title not in ['summary', 'genres', 'directors', 'actors'] %}
                                     <td data-title="{{ title }}"
-                                        {% if title == 'file_size' and row[title] != '' and row[title] != 'N/A' %}
-                                            data-raw-value="{{ row[title]|replace(' Go', '') }}"
+                                        {% if title in ['file_size', 'local_file_size', 'remote_file_size', 'largest_file_size'] and row[title] != '' and row[title] != 'N/A' %}
+                                            data-order="{{ row[title]|replace(' Go', '') }}"
                                         {% endif %}>
                                         {% if title == "title" %}
                                             <a href="#" class="item-title"
@@ -86,11 +87,7 @@
                                         {% elif row[title] == '' or row[title] == 'N/A' %}
                                             N/A
                                         {% else %}
-                                            {% if title == 'file_size' %}
-                                                {{ row[title] }}
-                                            {% else %}
-                                                {{ row[title] }}
-                                            {% endif %}
+                                            {{ row[title] }}
                                         {% endif %}
                                     </td>
                                 {% endif %}
@@ -258,53 +255,25 @@
 
                 $( api.column('view_count:name').footer() ).html('Total : ' + viewCountTotal);
 
-                // Calculer le total de la colonne 'file_size'
-                var fileSizeTotal = 0;
-                api.rows({filter: 'applied'}).every(function(rowIdx, tableLoop, rowLoop) {
-                    var data = this.node();
-                    var rawValue = $(data).find('td[data-title="file_size"]').data('raw-value');
-                    var num = parseFloat(rawValue);
-                    if (!isNaN(num)) {
-                        fileSizeTotal += num;
-                    }
-                });
-                $( api.column('file_size:name').footer() ).html('Total : ' + fileSizeTotal.toFixed(2) + ' Go');
+                // Fonction pour calculer le total des colonnes de taille de fichier
+                function calculateFileSizeTotal(columnName) {
+                    var total = 0;
+                    api.rows({filter: 'applied'}).every(function(rowIdx, tableLoop, rowLoop) {
+                        var data = this.node();
+                        var rawValue = $(data).find('td[data-title="' + columnName + '"]').data('order');
+                        var num = parseFloat(rawValue);
+                        if (!isNaN(num)) {
+                            total += num;
+                        }
+                    });
+                    $(api.column(columnName + ':name').footer()).html('Total : ' + total.toFixed(2) + ' Go');
+                }
 
-                // Calculer le total de la colonne 'local_file_size'
-                var localFileSizeTotal = 0;
-                api.rows({filter: 'applied'}).every(function(rowIdx, tableLoop, rowLoop) {
-                    var data = this.node();
-                    var rawValue = $(data).find('td[data-title="local_file_size"]').text().replace(' Go', '');
-                    var num = parseFloat(rawValue);
-                    if (!isNaN(num)) {
-                        localFileSizeTotal += num;
-                    }
-                });
-                $(api.column('local_file_size:name').footer()).html('Total : ' + localFileSizeTotal.toFixed(2) + ' Go');
-
-                // Calculer le total de la colonne 'remote_file_size'
-                var remoteFileSizeTotal = 0;
-                api.rows({filter: 'applied'}).every(function(rowIdx, tableLoop, rowLoop) {
-                    var data = this.node();
-                    var rawValue = $(data).find('td[data-title="remote_file_size"]').text().replace(' Go', '');
-                    var num = parseFloat(rawValue);
-                    if (!isNaN(num)) {
-                        remoteFileSizeTotal += num;
-                    }
-                });
-                $(api.column('remote_file_size:name').footer()).html('Total : ' + remoteFileSizeTotal.toFixed(2) + ' Go');
-
-                // Calculer le total de la colonne 'largest_file_size'
-                var largestFileSizeTotal = 0;
-                api.rows({filter: 'applied'}).every(function(rowIdx, tableLoop, rowLoop) {
-                    var data = this.node();
-                    var rawValue = $(data).find('td[data-title="largest_file_size"]').text().replace(' Go', '');
-                    var num = parseFloat(rawValue);
-                    if (!isNaN(num)) {
-                        largestFileSizeTotal += num;
-                    }
-                });
-                $(api.column('largest_file_size:name').footer()).html('Total : ' + largestFileSizeTotal.toFixed(2) + ' Go');
+                // Calculer les totaux pour les colonnes de taille de fichier
+                calculateFileSizeTotal('file_size');
+                calculateFileSizeTotal('local_file_size');
+                calculateFileSizeTotal('remote_file_size');
+                calculateFileSizeTotal('largest_file_size');
             }
         });
 
