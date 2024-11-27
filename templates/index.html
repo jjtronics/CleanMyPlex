@@ -9,42 +9,46 @@
         <a href="{{ url_for('duplicates') }}" class="list-group-item list-group-item-action">Vérifier les doublons entre serveurs Plex</a>
         <a href="{{ url_for('manage_users') }}" class="list-group-item list-group-item-action">Gestion des utilisateurs</a>
     </div>
-
-    {% if tasks_list %}
-        <div id="tasksStatus">
-            {% for task_id in tasks_list %}
-                <div id="task_{{ task_id }}">
-                    <p>Tâche en cours : <span class="task-message">Initialisation...</span></p>
-                </div>
-            {% endfor %}
-        </div>
-    {% endif %}
 {% endblock %}
 
 {% block scripts %}
     {% if tasks_list %}
     <script>
         $(document).ready(function() {
-            {% for task_id in tasks_list %}
-                function checkTaskStatus_{{ task_id }}() {
-                    $.getJSON("{{ url_for('task_status', task_id=task_id) }}", function(data) {
-                        if (data.status === 'running') {
-                            $("#task_{{ task_id }} .task-message").text(data.message);
-                            setTimeout(checkTaskStatus_{{ task_id }}, 2000);
-                        } else {
-                            $("#task_{{ task_id }} .task-message").text(data.message);
-                            if (data.status === 'completed') {
-                                $("#task_{{ task_id }}").addClass('alert alert-success');
-                            } else if (data.status === 'failed') {
-                                $("#task_{{ task_id }}").addClass('alert alert-danger');
-                            } else if (data.status === 'completed_with_errors') {
-                                $("#task_{{ task_id }}").addClass('alert alert-warning');
-                            }
+            var tasks = {{ tasks_list | tojson }};
+            tasks.forEach(function(task_id) {
+                checkTaskStatus(task_id);
+            });
+
+            function checkTaskStatus(task_id) {
+                var url = "{{ url_for('task_status', task_id='') }}" + task_id;
+                $.getJSON(url, function(data) {
+                    if (data.status === 'running') {
+                        // Optionnel : vous pouvez afficher une animation de chargement ou un message dans la console
+                        setTimeout(function() {
+                            checkTaskStatus(task_id);
+                        }, 2000);
+                    } else {
+                        if (data.status === 'completed') {
+                            showNotification('success', data.message);
+                        } else if (data.status === 'failed') {
+                            showNotification('danger', data.message);
+                        } else if (data.status === 'completed_with_errors') {
+                            showNotification('warning', data.message);
                         }
-                    });
-                }
-                checkTaskStatus_{{ task_id }}();
-            {% endfor %}
+                    }
+                }).fail(function(jqXHR, textStatus, errorThrown) {
+                    console.error("Erreur lors de la requête AJAX pour la tâche " + task_id + ": " + textStatus, errorThrown);
+                });
+            }
+
+            function showNotification(type, message) {
+                var alertDiv = $('<div class="alert alert-' + type + ' alert-dismissible fade show mt-3" role="alert">' +
+                                 message +
+                                 '<button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>' +
+                                 '</div>');
+                $('#dynamic-notifications').append(alertDiv);
+            }
         });
     </script>
     {% endif %}

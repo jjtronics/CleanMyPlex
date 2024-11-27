@@ -35,6 +35,9 @@
                     {% endif %}
                 {% endwith %}
             </div>
+            <!-- Conteneur pour les notifications dynamiques -->
+            <div id="dynamic-notifications"></div>
+
             {% block content %}{% endblock %}
             {% if request.endpoint != 'index' %}
             <div class="button-container">

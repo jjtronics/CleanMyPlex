@@ -43,7 +43,7 @@ CleanMyPlex est une application web permettant de gérer et nettoyer vos bibliot
 
 1. Clonez le dépôt GitHub :
    ```sh
-   git clone https://github.com/votre-utilisateur/cleanmyplex.git /opt/cleanmyplex
+   git clone https://github.com/jjtronics/cleanmyplex.git /opt/cleanmyplex
    cd /opt/cleanmyplex
 
 2. Créez un environnement virtuel et activez-le :

@@ -7,9 +7,7 @@ import json
 import os
 import threading
 import time
-import codecs
 from uuid import uuid4
-from io import BytesIO
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'
@@ -37,6 +35,10 @@ account = MyPlexAccount(PLEX_USERNAME, PLEX_PASSWORD)
 # Variables globales pour suivre les tâches en arrière-plan
 tasks = {}
 tasks_lock = threading.Lock()
+
+# Assurez-vous que le répertoire de cache des affiches existe
+if not os.path.exists('static/poster_cache'):
+    os.makedirs('static/poster_cache')
 
 def get_active_sessions():
     try:
@@ -196,10 +198,25 @@ def compare_libraries(library_names_local, library_names_friend, media_type):
                 directors = ', '.join([director.tag for director in local_item.directors]) if hasattr(local_item, 'directors') else 'N/A'
                 actors = ', '.join([actor.tag for actor in local_item.actors]) if hasattr(local_item, 'actors') else 'N/A'
 
+                # Gestion de l'affiche
                 if hasattr(local_item, 'thumb'):
-                    poster_url = f"/poster/{local_item.ratingKey}"
+                    poster_filename = f"poster_{local_item.ratingKey}.jpg"
+                    poster_filepath = os.path.join('static', 'poster_cache', poster_filename)
+                    poster_url = f"/static/poster_cache/{poster_filename}"
+
+                    # Télécharger et stocker l'image si elle n'existe pas
+                    if not os.path.exists(poster_filepath):
+                        poster_url_full = plex.url(local_item.thumb)
+                        headers = {'X-Plex-Token': PLEX_TOKEN}
+                        response = requests.get(poster_url_full, headers=headers, stream=True)
+                        if response.status_code == 200:
+                            with open(poster_filepath, 'wb') as f:
+                                for chunk in response.iter_content(1024):
+                                    f.write(chunk)
+                        else:
+                            poster_url = '/static/no_image_available.jpg'
                 else:
-                    poster_url = 'N/A'
+                    poster_url = '/static/no_image_available.jpg'
 
                 duplicate_entry = {
                     'title': title,
@@ -254,12 +271,16 @@ def compare_libraries(library_names_local, library_names_friend, media_type):
     df.to_csv(output_file, index=False)
     return df, output_file, len(duplicates), total_space_saved
 
+
 def generate_csv(library_names, csv_file, media_type):
+    print(f"generate_csv appelé avec library_names={library_names}, csv_file='{csv_file}', media_type='{media_type}'")
     if os.path.exists(csv_file):
+        print(f"Le fichier CSV '{csv_file}' existe déjà. Chargement des données existantes.")
         existing_df = pd.read_csv(csv_file, encoding='utf-8', delimiter=',', quotechar='"')
         existing_df['file_size'] = existing_df['file_size'].replace('N/A', '0')
         existing_df['file_size'] = existing_df['file_size'].str.replace(' Go', '', regex=False).astype(float)
     else:
+        print(f"Le fichier CSV '{csv_file}' n'existe pas. Création d'un nouveau DataFrame.")
         columns = [
             'title', 'ratingKey', 'rating', 'plex_rating', 'view_count', 'local_path',
             'added_at', 'release_date', 'file_size', 'Bibliothèque', 'Action',
@@ -267,47 +288,99 @@ def generate_csv(library_names, csv_file, media_type):
         ]
         existing_df = pd.DataFrame(columns=columns)
 
+    # Déterminer les bibliothèques à traiter
     if "ALL" in library_names:
         if media_type == 'movie':
             libraries = [section.title for section in plex.library.sections() if section.type == 'movie']
         elif media_type == 'show':
             libraries = [section.title for section in plex.library.sections() if section.type == 'show']
+        else:
+            libraries = []
     else:
         libraries = library_names
 
     new_items = []
-    for library_name in libraries:
+    total_libraries = len(libraries)
+    for lib_idx, library_name in enumerate(libraries):
+        print(f"Traitement de la bibliothèque {lib_idx + 1}/{total_libraries} : '{library_name}'")
         try:
             library = plex.library.section(library_name)
         except Exception as e:
             flash(f"Erreur lors de l'accès à la bibliothèque '{library_name}': {e}", 'danger')
+            print(f"Erreur lors de l'accès à la bibliothèque '{library_name}': {e}")
             continue
 
-        for item in library.all():
-            release_date = item.originallyAvailableAt if item.originallyAvailableAt else None
-            rating = item.audienceRating if item.audienceRating else 0
+        try:
+            all_items = library.all()
+        except Exception as e:
+            flash(f"Erreur lors de la récupération des éléments de la bibliothèque '{library_name}': {e}", 'danger')
+            print(f"Erreur lors de la récupération des éléments de la bibliothèque '{library_name}': {e}")
+            continue
 
-            if item.userRating is not None:
-                plex_rating = item.userRating
-            elif item.rating is not None:
-                plex_rating = item.rating
-            else:
-                plex_rating = 0
+        total_items = len(all_items)
+        for idx, item in enumerate(all_items):
+            print(f"Traitement de l'élément {idx + 1}/{total_items} : '{item.title}'")
+            try:
+                release_date = item.originallyAvailableAt if item.originallyAvailableAt else None
+                rating = item.audienceRating if item.audienceRating else 0
 
-            summary = item.summary if item.summary else 'N/A'
-            genres = ', '.join([genre.tag for genre in item.genres]) if hasattr(item, 'genres') else 'N/A'
-            directors = ', '.join([director.tag for director in item.directors]) if hasattr(item, 'directors') else 'N/A'
-            actors = ', '.join([actor.tag for actor in item.actors]) if hasattr(item, 'actors') else 'N/A'
+                if item.userRating is not None:
+                    plex_rating = item.userRating
+                elif item.rating is not None:
+                    plex_rating = item.rating
+                else:
+                    plex_rating = 0
 
-            if hasattr(item, 'thumb'):
-                poster_url = f"/poster/{item.ratingKey}"
-            else:
-                poster_url = 'N/A'
+                summary = item.summary if item.summary else 'N/A'
+                genres = ', '.join([genre.tag for genre in item.genres]) if hasattr(item, 'genres') else 'N/A'
+                directors = ', '.join([director.tag for director in item.directors]) if hasattr(item, 'directors') else 'N/A'
+                actors = ', '.join([actor.tag for actor in item.actors]) if hasattr(item, 'actors') else 'N/A'
 
-            if item.TYPE == 'movie':
-                view_count = item.viewCount if hasattr(item, 'viewCount') else 0
-                local_path = item.media[0].parts[0].file if item.media and item.media[0].parts else 'N/A'
-                file_size_gb = sum(media_part.size for media in item.media for media_part in media.parts) / (1024 ** 3)
+                # Gestion de l'affiche
+                if hasattr(item, 'thumb'):
+                    poster_filename = f"poster_{item.ratingKey}.jpg"
+                    poster_filepath = os.path.join('static', 'poster_cache', poster_filename)
+                    poster_url = f"/static/poster_cache/{poster_filename}"
+
+                    # Télécharger et stocker l'image si elle n'existe pas
+                    if not os.path.exists(poster_filepath):
+                        poster_url_full = plex.url(item.thumb)
+                        headers = {'X-Plex-Token': PLEX_TOKEN}
+                        try:
+                            response = requests.get(poster_url_full, headers=headers, stream=True, timeout=10)
+                            if response.status_code == 200:
+                                with open(poster_filepath, 'wb') as f:
+                                    for chunk in response.iter_content(1024):
+                                        f.write(chunk)
+                            else:
+                                print(f"Erreur lors du téléchargement de l'image pour '{item.title}': {response.status_code}")
+                                poster_url = '/static/no_image_available.jpg'
+                        except Exception as e:
+                            print(f"Exception lors du téléchargement de l'image pour '{item.title}': {e}")
+                            poster_url = '/static/no_image_available.jpg'
+                else:
+                    poster_url = '/static/no_image_available.jpg'
+
+                if item.TYPE == 'movie':
+                    view_count = item.viewCount if hasattr(item, 'viewCount') else 0
+                    local_path = item.media[0].parts[0].file if item.media and item.media[0].parts else 'N/A'
+                    file_size_gb = sum(media_part.size for media in item.media for media_part in media.parts) / (1024 ** 3)
+                elif item.TYPE == 'show':
+                    view_count = sum(
+                        episode.viewCount for episode in item.episodes() if hasattr(episode, 'viewCount')
+                    )
+                    local_path = 'N/A'
+                    file_size_gb = sum(
+                        media_part.size
+                        for episode in item.episodes()
+                        for media in episode.media
+                        for media_part in media.parts
+                    ) / (1024 ** 3)
+                else:
+                    view_count = 0
+                    local_path = 'N/A'
+                    file_size_gb = 0.0
+
                 new_items.append({
                     'title': item.title,
                     'ratingKey': item.ratingKey,
@@ -327,35 +400,12 @@ def generate_csv(library_names, csv_file, media_type):
                     'actors': actors
                 })
 
-            elif item.TYPE == 'show':
-                view_count = sum(episode.viewCount for episode in item.episodes() if hasattr(episode, 'viewCount'))
-                local_path = 'N/A'
-                file_size_gb = sum(
-                    media_part.size
-                    for episode in item.episodes()
-                    for media in episode.media
-                    for media_part in media.parts
-                ) / (1024 ** 3)
-                new_items.append({
-                    'title': item.title,
-                    'ratingKey': item.ratingKey,
-                    'rating': rating,
-                    'plex_rating': plex_rating,
-                    'view_count': view_count,
-                    'local_path': local_path,
-                    'added_at': item.addedAt.strftime('%Y-%m-%d') if item.addedAt else 'N/A',
-                    'release_date': release_date.strftime('%Y-%m-%d') if release_date else 'N/A',
-                    'file_size': file_size_gb,
-                    'Bibliothèque': library_name,
-                    'Action': '',
-                    'poster_url': poster_url,
-                    'summary': summary,
-                    'genres': genres,
-                    'directors': directors,
-                    'actors': actors
-                })
+            except Exception as e:
+                print(f"Erreur lors du traitement de l'élément '{item.title}': {e}")
+                continue
 
     new_df = pd.DataFrame(new_items)
+    print("Tous les éléments ont été traités. Création du DataFrame.")
 
     if not existing_df.empty and not new_df.empty:
         combined_df = pd.concat([existing_df, new_df]).drop_duplicates(subset='title', keep='first').reset_index(drop=True)
@@ -382,8 +432,11 @@ def generate_csv(library_names, csv_file, media_type):
         'poster_url', 'summary', 'genres', 'directors', 'actors'
     ]
     combined_df = combined_df[columns_order]
+    print(f"Écriture du DataFrame dans le fichier CSV '{csv_file}'.")
     combined_df.to_csv(csv_file, index=False)
+    print(f"CSV '{csv_file}' généré avec succès.")
     return combined_df, csv_file
+
 
 # Fonction de génération de CSV en arrière-plan avec thread
 def generate_csv_thread(library_names, csv_file, media_type, task_id):
@@ -686,7 +739,7 @@ def task_status(task_id):
         status = tasks.get(task_id, {'status': 'unknown', 'message': 'Tâche inconnue.'})
     return jsonify(status)
 
-@app.route('/view_csv/<csv_file>', methods=['GET', 'POST'])
+@app.route('/view_csv/<path:csv_file>', methods=['GET', 'POST'])
 def view_csv(csv_file):
     if os.path.exists(csv_file):
         df = pd.read_csv(csv_file)
@@ -753,7 +806,6 @@ def process_csv(csv_file):
     threading.Thread(target=delete_items_from_csv_thread, args=(csv_file, task_id)).start()
     flash('La suppression a démarré en arrière-plan.', 'info')
     return redirect(url_for('index', tasks=task_id))
-    pass
 
 @app.route('/download/<path:csv_file>')
 def download_csv(csv_file):
@@ -794,21 +846,6 @@ def settings():
         local_show_libraries=get_library_sections(plex, 'show'),
         friend_server_names=[resource.name for resource in account.resources()]
     )
-
-@app.route('/poster/<int:rating_key>')
-def get_poster(rating_key):
-    try:
-        item = plex.fetchItem(rating_key)
-        if item.thumb:
-            poster_url = plex.url(item.thumb)
-            headers = {'X-Plex-Token': PLEX_TOKEN}
-            response = requests.get(poster_url, headers=headers, stream=True)
-            return Response(response.content, mimetype='image/jpeg')
-        else:
-            return send_file('static/no_image_available.jpg', mimetype='image/jpeg')
-    except Exception as e:
-        print(f"Erreur lors de la récupération de la jaquette : {e}")
-        return send_file('static/no_image_available.jpg', mimetype='image/jpeg')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)

@@ -11,6 +11,7 @@
                 <thead>
                     <tr>
                         <th><input type="checkbox" id="select_all"></th>
+                        <th>Miniature</th>
                         {% for title in titles %}
                             {% if title != 'poster_url' and title not in ['summary', 'genres', 'directors', 'actors'] %}
                                 <th>{{ title }}</th>
@@ -19,6 +20,7 @@
                     </tr>
                     <!-- Ligne des filtres -->
                     <tr>
+                        <th></th>
                         <th></th>
                         {% for title in titles %}
                             {% if title != 'poster_url' and title not in ['summary', 'genres', 'directors', 'actors'] %}
@@ -65,6 +67,17 @@
                     {% for index, row in df.iterrows() %}
                         <tr>
                             <td><input type="checkbox" class="row-select" name="selected_rows" value="{{ index }}"></td>
+                            <!-- Utiliser un placeholder pour l'image et stocker l'URL réelle dans data-actualsrc -->
+                            <td>
+                                {% if row['poster_url'] != 'N/A' %}
+                                    <img src="{{ url_for('static', filename='placeholder.jpg') }}"
+                                         data-actualsrc="{{ row['poster_url'] }}"
+                                         alt="Affiche" width="50" class="lazy-image">
+                                {% else %}
+                                    <img src="{{ url_for('static', filename='no_image_available.jpg') }}"
+                                         alt="Pas d'image" width="50">
+                                {% endif %}
+                            </td>
                             {% for title in titles %}
                                 {% if title != 'poster_url' and title not in ['summary', 'genres', 'directors', 'actors'] %}
                                     <td data-title="{{ title }}"
@@ -95,9 +108,10 @@
                         </tr>
                     {% endfor %}
                 </tbody>
-                <!-- Table Footer for Totals and Averages -->
+                <!-- Pied de page du tableau pour les totaux et moyennes -->
                 <tfoot>
                     <tr>
+                        <th></th>
                         <th></th>
                         {% for title in titles %}
                             {% if title != 'poster_url' and title not in ['summary', 'genres', 'directors', 'actors'] %}
@@ -210,6 +224,7 @@
             "dom": 'lfrtip',
             "columns": [
                 { "name": "select", "orderable": false },  // Colonne de sélection
+                { "name": "miniature", "orderable": false },  // Nouvelle colonne pour la miniature
                 {% for title in titles %}
                     {% if title != 'poster_url' and title not in ['summary', 'genres', 'directors', 'actors'] %}
                         { "name": "{{ title }}"{% if title == "Action" %}, "orderable": false{% endif %} },
@@ -277,6 +292,28 @@
             }
         });
 
+        // Fonction pour charger les images des lignes visibles
+        function loadVisibleImages() {
+            $('#csvTable tbody tr').each(function() {
+                var img = $(this).find('img.lazy-image');
+                if (img.length > 0) {
+                    var actualSrc = img.attr('data-actualsrc');
+                    if (actualSrc && !img.attr('data-loaded')) {
+                        img.attr('src', actualSrc);
+                        img.attr('data-loaded', true);
+                    }
+                }
+            });
+        }
+
+        // Charger les images lors du premier affichage
+        loadVisibleImages();
+
+        // Charger les images lors du changement de page, de tri ou de recherche
+        table.on('draw', function() {
+            loadVisibleImages();
+        });
+
         // Gestionnaire d'événements pour les filtres
         $('.column-filter').on('keyup change', function() {
             table.draw();
@@ -289,7 +326,7 @@
                 var row = table.row(dataIndex).node();
 
                 $('#csvTable thead tr:eq(1) th').each(function(index) {
-                    if (index === 0) return; // Ignorer la colonne de sélection
+                    if (index === 0 || index === 1) return; // Ignorer les colonnes de sélection et de miniature
 
                     var input = $(this).find('.column-filter');
                     if (input.length > 0) {
