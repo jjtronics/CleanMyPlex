@@ -35,6 +35,17 @@
                     {% endif %}
                 {% endwith %}
             </div>
+            {% if connection_status.has_issues %}
+                <div class="alert alert-warning">
+                    <strong>Mode dégradé activé.</strong> L'interface reste disponible, mais certaines fonctions Plex sont bloquées tant que la configuration n'est pas corrigée.
+                    {% if connection_status.plex_error %}
+                        <div><strong>Serveur Plex :</strong> {{ connection_status.plex_error }}</div>
+                    {% endif %}
+                    {% if connection_status.account_error %}
+                        <div><strong>Compte Plex :</strong> {{ connection_status.account_error }}</div>
+                    {% endif %}
+                </div>
+            {% endif %}
             <!-- Conteneur pour les notifications dynamiques -->
             <div id="dynamic-notifications"></div>
 

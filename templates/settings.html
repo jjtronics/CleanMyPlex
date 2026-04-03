@@ -29,11 +29,25 @@
         
         <div class="form-group">
             <label for="FRIEND_SERVER_NAME">Nom du serveur Plex de l'ami:</label>
-            <select class="form-control" id="FRIEND_SERVER_NAME" name="friend_server_name" required>
+            <input
+                type="text"
+                class="form-control"
+                id="FRIEND_SERVER_NAME"
+                name="friend_server_name"
+                list="friend-server-suggestions"
+                value="{{ config.FRIEND_SERVER_NAME }}"
+                placeholder="Nom exact du serveur Plex à comparer"
+            >
+            <datalist id="friend-server-suggestions">
                 {% for server in friend_server_names %}
-                    <option value="{{ server }}" {% if server == config.FRIEND_SERVER_NAME %}selected{% endif %}>{{ server }}</option>
+                    <option value="{{ server }}">
                 {% endfor %}
-            </select>
+            </datalist>
+            {% if not friend_server_names %}
+                <small class="form-text text-muted">
+                    Aucun serveur n'a pu être chargé pour le moment. Vous pouvez saisir le nom manuellement, puis retester après correction des identifiants.
+                </small>
+            {% endif %}
         </div>
 
         <button type="submit" class="btn btn-primary">Mettre à jour les paramètres</button>
@@ -42,13 +56,14 @@
     <script>
         // Test du token
         document.getElementById('test-token').addEventListener('click', function() {
+            const plexUrl = document.getElementById('PLEX_URL').value;
             const token = document.getElementById('PLEX_TOKEN').value;
             fetch('/test_token', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 },
-                body: new URLSearchParams({ PLEX_TOKEN: token }),
+                body: new URLSearchParams({ PLEX_URL: plexUrl, PLEX_TOKEN: token }),
             })
             .then(response => response.json())
             .then(data => {

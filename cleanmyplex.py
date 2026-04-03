@@ -14,23 +14,42 @@ app.secret_key = 'supersecretkey'
 
 # Charger la configuration depuis le fichier config.json
 def load_config():
-    with open('config.json') as config_file:
-        return json.load(config_file)
+    default_config = {
+        'PLEX_URL': '',
+        'PLEX_TOKEN': '',
+        'PLEX_USERNAME': '',
+        'PLEX_PASSWORD': '',
+        'FRIEND_SERVER_NAME': ''
+    }
+
+    config_paths = ['config.json', 'config.json.example']
+    for config_path in config_paths:
+        if os.path.exists(config_path):
+            with open(config_path) as config_file:
+                loaded_config = json.load(config_file)
+            default_config.update(loaded_config)
+            return default_config
+
+    return default_config
 
 config = load_config()
 
-PLEX_URL = config['PLEX_URL']
-PLEX_TOKEN = config['PLEX_TOKEN']
-PLEX_USERNAME = config['PLEX_USERNAME']
-PLEX_PASSWORD = config['PLEX_PASSWORD']
-FRIEND_SERVER_NAME = config['FRIEND_SERVER_NAME']
+PLEX_URL = config.get('PLEX_URL', '')
+PLEX_TOKEN = config.get('PLEX_TOKEN', '')
+PLEX_USERNAME = config.get('PLEX_USERNAME', '')
+PLEX_PASSWORD = config.get('PLEX_PASSWORD', '')
+FRIEND_SERVER_NAME = config.get('FRIEND_SERVER_NAME', '')
 CSV_FILE_FILMS = 'unwatched_movies.csv'
 CSV_FILE_SERIES = 'unwatched_series.csv'
 CSV_FILE_COMMON_MOVIES = 'common_movies.csv'
 CSV_FILE_COMMON_SERIES = 'common_series.csv'
 
-plex = PlexServer(PLEX_URL, PLEX_TOKEN, timeout=300)
-account = MyPlexAccount(PLEX_USERNAME, PLEX_PASSWORD)
+plex = None
+account = None
+connection_status = {
+    'plex_error': None,
+    'account_error': None
+}
 
 # Variables globales pour suivre les tâches en arrière-plan
 tasks = {}
@@ -39,6 +58,81 @@ tasks_lock = threading.Lock()
 # Assurez-vous que le répertoire de cache des affiches existe
 if not os.path.exists('static/poster_cache'):
     os.makedirs('static/poster_cache')
+
+
+def connect_to_plex(plex_url, plex_token):
+    if not plex_url or not plex_token:
+        return None, 'URL ou token Plex manquant.'
+
+    try:
+        plex_server = PlexServer(plex_url, plex_token, timeout=300)
+        plex_server.library.sections()
+        return plex_server, None
+    except Exception as e:
+        app.logger.warning("Connexion au serveur Plex impossible: %s", e)
+        return None, str(e)
+
+
+def connect_to_account(username, password):
+    if not username or not password:
+        return None, 'Identifiants Plex manquants.'
+
+    try:
+        plex_account = MyPlexAccount(username, password)
+        plex_account.resources()
+        return plex_account, None
+    except Exception as e:
+        app.logger.warning("Connexion au compte Plex impossible: %s", e)
+        return None, str(e)
+
+
+def refresh_connections():
+    global plex, account
+
+    plex, connection_status['plex_error'] = connect_to_plex(PLEX_URL, PLEX_TOKEN)
+    account, connection_status['account_error'] = connect_to_account(PLEX_USERNAME, PLEX_PASSWORD)
+
+
+def ensure_required_connections(require_plex=False, require_account=False):
+    errors = []
+
+    if require_plex and plex is None:
+        errors.append(f"Connexion au serveur Plex indisponible : {connection_status['plex_error']}")
+
+    if require_account and account is None:
+        errors.append(f"Connexion au compte Plex indisponible : {connection_status['account_error']}")
+
+    if errors:
+        for error_message in errors:
+            flash(f"{error_message} Rendez-vous dans les paramètres pour corriger la configuration.", 'warning')
+        return False
+
+    return True
+
+
+def get_friend_server_names():
+    if account is None:
+        return []
+
+    try:
+        return [resource.name for resource in account.resources()]
+    except Exception as e:
+        app.logger.warning("Impossible de récupérer la liste des serveurs amis: %s", e)
+        return []
+
+
+@app.context_processor
+def inject_connection_status():
+    return {
+        'connection_status': {
+            'plex_error': connection_status['plex_error'],
+            'account_error': connection_status['account_error'],
+            'has_issues': any(connection_status.values())
+        }
+    }
+
+
+refresh_connections()
 
 def get_active_sessions():
     try:
@@ -513,27 +607,31 @@ def compare_libraries_thread(local_library_names, friend_library_names, media_ty
 
 @app.route('/test_token', methods=['POST'])
 def test_token():
-    try:
-        test_token = request.form['PLEX_TOKEN']
-        plex_test = PlexServer(config['PLEX_URL'], test_token)
-        plex_test.library.sections()
-        return jsonify({'status': 'success', 'message': 'Connexion réussie avec ce token !'})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': f'Erreur : {str(e)}'})
+    plex_url = request.form.get('PLEX_URL', config.get('PLEX_URL', ''))
+    test_token = request.form['PLEX_TOKEN']
+    _, error_message = connect_to_plex(plex_url, test_token)
+
+    if error_message:
+        return jsonify({'status': 'error', 'message': f'Erreur : {error_message}'})
+
+    return jsonify({'status': 'success', 'message': 'Connexion réussie avec ce token !'})
 
 @app.route('/test_login', methods=['POST'])
 def test_login():
-    try:
-        plex_username = request.form['PLEX_USERNAME']
-        plex_password = request.form['PLEX_PASSWORD']
-        account_test = MyPlexAccount(plex_username, plex_password)
-        account_test.devices()
-        return jsonify({'status': 'success', 'message': 'Connexion réussie avec ces identifiants !'})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': f'Erreur : {str(e)}'})
+    plex_username = request.form['PLEX_USERNAME']
+    plex_password = request.form['PLEX_PASSWORD']
+    _, error_message = connect_to_account(plex_username, plex_password)
+
+    if error_message:
+        return jsonify({'status': 'error', 'message': f'Erreur : {error_message}'})
+
+    return jsonify({'status': 'success', 'message': 'Connexion réussie avec ces identifiants !'})
 
 @app.route('/manage_users')
 def manage_users():
+    if not ensure_required_connections(require_plex=True, require_account=True):
+        return redirect(url_for('settings'))
+
     try:
         users = account.users()
         sessions = get_active_sessions()
@@ -562,6 +660,9 @@ def manage_users():
 
 @app.route('/user_details/<username>')
 def user_details(username):
+    if not ensure_required_connections(require_plex=True, require_account=True):
+        return redirect(url_for('settings'))
+
     try:
         user = next((u for u in account.users() if u.username == username), None)
         if not user:
@@ -624,6 +725,9 @@ def delete_csv():
 
 @app.route('/clean', methods=['GET', 'POST'])
 def clean():
+    if not ensure_required_connections(require_plex=True):
+        return redirect(url_for('settings'))
+
     local_movie_libraries = get_library_sections(plex, 'movie')
     local_show_libraries = get_library_sections(plex, 'show')
 
@@ -673,6 +777,9 @@ def clean():
 
 @app.route('/duplicates', methods=['GET', 'POST'])
 def duplicates():
+    if not ensure_required_connections(require_plex=True, require_account=True):
+        return redirect(url_for('settings'))
+
     try:
         friend_server = account.resource(FRIEND_SERVER_NAME).connect()
         friend_movie_libraries = get_library_sections(friend_server, 'movie')
@@ -815,7 +922,6 @@ def download_csv(csv_file):
 def settings():
     global PLEX_URL, PLEX_TOKEN, PLEX_USERNAME, PLEX_PASSWORD
     global FRIEND_SERVER_NAME
-    global plex, account
 
     if request.method == 'POST':
         config['PLEX_URL'] = request.form.get('PLEX_URL')
@@ -833,8 +939,17 @@ def settings():
         PLEX_PASSWORD = config['PLEX_PASSWORD']
         FRIEND_SERVER_NAME = config['FRIEND_SERVER_NAME']
 
-        plex = PlexServer(PLEX_URL, PLEX_TOKEN)
-        account = MyPlexAccount(PLEX_USERNAME, PLEX_PASSWORD)
+        refresh_connections()
+
+        if plex is None:
+            flash(f"Connexion au serveur Plex invalide : {connection_status['plex_error']}", 'warning')
+
+        if account is None:
+            flash(f"Connexion au compte Plex invalide : {connection_status['account_error']}", 'warning')
+
+        if plex is None or account is None:
+            flash('Paramètres enregistrés, mais certaines connexions Plex sont encore invalides.', 'warning')
+            return redirect(url_for('settings'))
 
         flash('Paramètres mis à jour avec succès.', 'success')
         return redirect(url_for('index'))
@@ -842,9 +957,9 @@ def settings():
     return render_template(
         'settings.html',
         config=config,
-        local_movie_libraries=get_library_sections(plex, 'movie'),
-        local_show_libraries=get_library_sections(plex, 'show'),
-        friend_server_names=[resource.name for resource in account.resources()]
+        local_movie_libraries=get_library_sections(plex, 'movie') if plex else [],
+        local_show_libraries=get_library_sections(plex, 'show') if plex else [],
+        friend_server_names=get_friend_server_names()
     )
 
 if __name__ == '__main__':
