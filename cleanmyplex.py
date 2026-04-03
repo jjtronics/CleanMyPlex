@@ -48,7 +48,8 @@ plex = None
 account = None
 connection_status = {
     'plex_error': None,
-    'account_error': None
+    'account_error': None,
+    'account_configured': False
 }
 
 # Variables globales pour suivre les tâches en arrière-plan
@@ -74,8 +75,11 @@ def connect_to_plex(plex_url, plex_token):
 
 
 def connect_to_account(username, password):
+    if not username and not password:
+        return None, None
+
     if not username or not password:
-        return None, 'Identifiants Plex manquants.'
+        return None, "Le nom d'utilisateur et le mot de passe Plex doivent être renseignés ensemble."
 
     try:
         plex_account = MyPlexAccount(username, password)
@@ -91,6 +95,7 @@ def refresh_connections():
 
     plex, connection_status['plex_error'] = connect_to_plex(PLEX_URL, PLEX_TOKEN)
     account, connection_status['account_error'] = connect_to_account(PLEX_USERNAME, PLEX_PASSWORD)
+    connection_status['account_configured'] = bool(PLEX_USERNAME and PLEX_PASSWORD)
 
 
 def ensure_required_connections(require_plex=False, require_account=False):
@@ -100,7 +105,10 @@ def ensure_required_connections(require_plex=False, require_account=False):
         errors.append(f"Connexion au serveur Plex indisponible : {connection_status['plex_error']}")
 
     if require_account and account is None:
-        errors.append(f"Connexion au compte Plex indisponible : {connection_status['account_error']}")
+        if connection_status['account_configured']:
+            errors.append(f"Connexion au compte Plex indisponible : {connection_status['account_error']}")
+        else:
+            errors.append("Cette fonctionnalité nécessite les identifiants Plex (username et password).")
 
     if errors:
         for error_message in errors:
@@ -127,7 +135,8 @@ def inject_connection_status():
         'connection_status': {
             'plex_error': connection_status['plex_error'],
             'account_error': connection_status['account_error'],
-            'has_issues': any(connection_status.values())
+            'account_configured': connection_status['account_configured'],
+            'has_issues': bool(connection_status['plex_error'] or connection_status['account_error'])
         }
     }
 
@@ -944,11 +953,15 @@ def settings():
         if plex is None:
             flash(f"Connexion au serveur Plex invalide : {connection_status['plex_error']}", 'warning')
 
-        if account is None:
+        if connection_status['account_error']:
             flash(f"Connexion au compte Plex invalide : {connection_status['account_error']}", 'warning')
 
-        if plex is None or account is None:
-            flash('Paramètres enregistrés, mais certaines connexions Plex sont encore invalides.', 'warning')
+        if plex is None:
+            flash('Paramètres enregistrés, mais la connexion au serveur Plex est encore invalide.', 'warning')
+            return redirect(url_for('settings'))
+
+        if connection_status['account_error']:
+            flash('Paramètres enregistrés. Les fonctions qui dépendent du compte Plex resteront indisponibles tant que les identifiants ne sont pas corrigés.', 'warning')
             return redirect(url_for('settings'))
 
         flash('Paramètres mis à jour avec succès.', 'success')
