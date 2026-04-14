@@ -12,19 +12,22 @@
         </div>
         <div class="form-group">
             <label for="PLEX_TOKEN">Plex Token:</label>
-            <input type="text" class="form-control" id="PLEX_TOKEN" name="PLEX_TOKEN" value="{{ config.PLEX_TOKEN }}" required>
+            <input type="text" class="form-control" id="PLEX_TOKEN" name="PLEX_TOKEN" value="{{ config.PLEX_TOKEN }}">
             <button type="button" class="btn btn-secondary" id="test-token">Tester le token</button>
             <div id="token-test-result" style="margin-top: 10px;"></div>
         </div>
         <div class="form-group">
             <label for="PLEX_USERNAME">Plex Username:</label>
-            <input type="text" class="form-control" id="PLEX_USERNAME" name="PLEX_USERNAME" value="{{ config.PLEX_USERNAME }}" required>
+            <input type="text" class="form-control" id="PLEX_USERNAME" name="PLEX_USERNAME" value="{{ config.PLEX_USERNAME }}">
         </div>
         <div class="form-group">
             <label for="PLEX_PASSWORD">Plex Password:</label>
-            <input type="password" class="form-control" id="PLEX_PASSWORD" name="PLEX_PASSWORD" value="{{ config.PLEX_PASSWORD }}" required>
+            <input type="password" class="form-control" id="PLEX_PASSWORD" name="PLEX_PASSWORD" value="{{ config.PLEX_PASSWORD }}">
             <button type="button" class="btn btn-secondary" id="test-login">Tester le login</button>
             <div id="login-test-result" style="margin-top: 10px;"></div>
+        </div>
+        <div id="auth-validation-result" class="alert alert-danger" style="display: none; margin-top: 10px;">
+            Renseignez soit un token Plex, soit un couple username/password.
         </div>
         
         <div class="form-group">
@@ -54,6 +57,40 @@
     </form>
 
     <script>
+        const settingsForm = document.getElementById('settings-form');
+        const tokenInput = document.getElementById('PLEX_TOKEN');
+        const usernameInput = document.getElementById('PLEX_USERNAME');
+        const passwordInput = document.getElementById('PLEX_PASSWORD');
+        const authValidationResult = document.getElementById('auth-validation-result');
+
+        function hasValidAuthenticationConfig() {
+            const token = tokenInput.value.trim();
+            const username = usernameInput.value.trim();
+            const password = passwordInput.value.trim();
+
+            return Boolean(token || (username && password));
+        }
+
+        function updateAuthenticationValidation() {
+            if (hasValidAuthenticationConfig()) {
+                authValidationResult.style.display = 'none';
+                return true;
+            }
+
+            authValidationResult.style.display = 'block';
+            return false;
+        }
+
+        settingsForm.addEventListener('submit', function(event) {
+            if (!updateAuthenticationValidation()) {
+                event.preventDefault();
+            }
+        });
+
+        tokenInput.addEventListener('input', updateAuthenticationValidation);
+        usernameInput.addEventListener('input', updateAuthenticationValidation);
+        passwordInput.addEventListener('input', updateAuthenticationValidation);
+
         // Test du token
         document.getElementById('test-token').addEventListener('click', function() {
             const plexUrl = document.getElementById('PLEX_URL').value;

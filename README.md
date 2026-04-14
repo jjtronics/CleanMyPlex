@@ -8,6 +8,7 @@ CleanMyPlex est une application web permettant de gérer et nettoyer vos bibliot
 - [Fonctionnalités](#fonctionnalités)
 - [Prérequis](#prérequis)
 - [Installation](#installation)
+- [Mise à jour](#mise-à-jour)
 - [Scripts Systemd](#scripts-systemd)
 - [Contribution](#contribution)
 
@@ -74,6 +75,32 @@ CleanMyPlex est une application web permettant de gérer et nettoyer vos bibliot
 6. Changer le Propriétaire du Répertoire du Projet :
    ```sh
    sudo chown -R cleanmyplex:cleanmyplex /opt/cleanmyplex
+
+## Mise à jour
+
+Pour mettre à jour une installation existante de CleanMyPlex via git :
+
+1. Placez-vous dans le répertoire du projet :
+   ```sh
+   cd /opt/cleanmyplex
+
+2. Récupérez la dernière version :
+   ```sh
+   git pull origin main
+
+3. Réactivez l'environnement virtuel :
+   ```sh
+   source plex_env/bin/activate
+
+4. Réinstallez les dépendances au cas où elles auraient changé :
+   ```sh
+   pip install -r requirements.txt
+
+5. Si CleanMyPlex est lancé via systemd, redémarrez le service :
+   ```sh
+   sudo systemctl restart cleanmyplex.service
+
+Si vous avez modifié des fichiers suivis par git localement, pensez à sauvegarder vos changements avant le `git pull` avec un commit ou un `git stash`.
 
 ## Scripts Systemd
 

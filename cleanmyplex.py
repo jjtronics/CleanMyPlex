@@ -933,11 +933,21 @@ def settings():
     global FRIEND_SERVER_NAME
 
     if request.method == 'POST':
-        config['PLEX_URL'] = request.form.get('PLEX_URL')
-        config['PLEX_TOKEN'] = request.form.get('PLEX_TOKEN')
-        config['PLEX_USERNAME'] = request.form.get('PLEX_USERNAME')
-        config['PLEX_PASSWORD'] = request.form.get('PLEX_PASSWORD')
-        config['FRIEND_SERVER_NAME'] = request.form.get('friend_server_name', '')
+        plex_url = request.form.get('PLEX_URL', '').strip()
+        plex_token = request.form.get('PLEX_TOKEN', '').strip()
+        plex_username = request.form.get('PLEX_USERNAME', '').strip()
+        plex_password = request.form.get('PLEX_PASSWORD', '').strip()
+        friend_server_name = request.form.get('friend_server_name', '').strip()
+
+        if not plex_token and not (plex_username and plex_password):
+            flash('Renseignez soit un token Plex, soit un couple username/password.', 'warning')
+            return redirect(url_for('settings'))
+
+        config['PLEX_URL'] = plex_url
+        config['PLEX_TOKEN'] = plex_token
+        config['PLEX_USERNAME'] = plex_username
+        config['PLEX_PASSWORD'] = plex_password
+        config['FRIEND_SERVER_NAME'] = friend_server_name
 
         with open('config.json', 'w') as config_file:
             json.dump(config, config_file, indent=4)
