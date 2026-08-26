@@ -2,28 +2,101 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}CleanMyPlex{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <!-- Inclure Bootstrap CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <!-- DataTables CSS -->
     <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css">
-    <!-- Google Fonts Roboto -->
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
-    <div class="container">
-        <header>
-            <div class="header-left">
-                <a href="{{ url_for('index') }}">
-                    <img src="{{ url_for('static', filename='logo.png') }}" alt="CleanMyPlex Logo" class="logo">
+<body class="app-shell">
+    {% set endpoint = request.endpoint or '' %}
+    {% set route_args = request.view_args or {} %}
+    {% set current_library = route_args.get('library', '') %}
+    {% set current_csv = route_args.get('csv_file', '') %}
+    <aside class="app-sidebar">
+        <a href="{{ url_for('index') }}" class="brand-lockup" aria-label="CleanMyPlex">
+            <span class="brand-lockup__mark">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="">
+            </span>
+            <span class="brand-lockup__copy">
+                <span class="brand-lockup__name">CleanMyPlex</span>
+                <span class="brand-lockup__edition">Console Plex</span>
+            </span>
+        </a>
+
+        <div class="health-strip" aria-label="Etat de la connexion Plex">
+            {% if connection_status.has_issues %}
+                <span class="health-strip__item health-strip__item--crit">Plex</span>
+                <span class="health-strip__item health-strip__item--warn">Config</span>
+            {% else %}
+                <span class="health-strip__item health-strip__item--ok">Plex</span>
+                <span class="health-strip__item health-strip__item--ok">Config</span>
+            {% endif %}
+        </div>
+
+        <nav class="app-nav" aria-label="Navigation principale">
+            <div class="app-nav__section">
+                <div class="app-nav__label">Actions</div>
+                <a href="{{ url_for('index') }}" class="app-nav__link {% if endpoint == 'index' %}app-nav__link--active{% endif %}">
+                    <span class="app-nav__icon">⌂</span>
+                    <span>
+                        <span class="app-nav__title">Accueil</span>
+                        <span class="app-nav__subtitle">Vue d'ensemble</span>
+                    </span>
+                </a>
+                <a href="{{ url_for('clean') }}" class="app-nav__link {% if endpoint == 'clean' or current_library in ['films', 'series'] or current_csv in ['unwatched_movies.csv', 'unwatched_series.csv'] %}app-nav__link--active{% endif %}">
+                    <span class="app-nav__icon">▦</span>
+                    <span>
+                        <span class="app-nav__title">Nettoyage</span>
+                        <span class="app-nav__subtitle">Films et séries non vus</span>
+                    </span>
+                </a>
+                <a href="{{ url_for('duplicates') }}" class="app-nav__link {% if endpoint == 'duplicates' or current_library in ['common_movies', 'common_series'] or current_csv in ['common_movies.csv', 'common_series.csv'] %}app-nav__link--active{% endif %}">
+                    <span class="app-nav__icon">◇</span>
+                    <span>
+                        <span class="app-nav__title">Doublons</span>
+                        <span class="app-nav__subtitle">Comparaison serveurs</span>
+                    </span>
+                </a>
+                <a href="{{ url_for('manage_users') }}" class="app-nav__link {% if endpoint in ['manage_users', 'user_details'] %}app-nav__link--active{% endif %}">
+                    <span class="app-nav__icon">◉</span>
+                    <span>
+                        <span class="app-nav__title">Utilisateurs</span>
+                        <span class="app-nav__subtitle">Accès et activité</span>
+                    </span>
                 </a>
             </div>
-            <div class="header-right">
+
+            <div class="app-nav__section">
+                <div class="app-nav__label">Système</div>
+                <a href="{{ url_for('settings') }}" class="app-nav__link {% if endpoint == 'settings' %}app-nav__link--active{% endif %}">
+                    <span class="app-nav__icon">⚙</span>
+                    <span>
+                        <span class="app-nav__title">Paramètres</span>
+                        <span class="app-nav__subtitle">Token et serveur Plex</span>
+                    </span>
+                </a>
+            </div>
+        </nav>
+    </aside>
+
+    <div class="app-body">
+        <header class="topbar">
+            <div class="title-block">
+                <div class="title-block__eyebrow">Plex maintenance console</div>
+                <h1>{% block header_title %}{{ self.title() }}{% endblock %}</h1>
+                <p>{% block header_subtitle %}Nettoyage, doublons et accès Plex dans une interface opérateur compacte.{% endblock %}</p>
+            </div>
+            <div class="topbar__actions">
                 <a href="{{ url_for('settings') }}" class="btn btn-primary">Paramètres</a>
             </div>
         </header>
-        <main>
+
+        <main class="app-main">
             <div class="alert-container" id="notifications">
                 {% with messages = get_flashed_messages(with_categories=true) %}
                     {% if messages %}
@@ -49,7 +122,9 @@
             <!-- Conteneur pour les notifications dynamiques -->
             <div id="dynamic-notifications"></div>
 
-            {% block content %}{% endblock %}
+            <section class="content-panel">
+                {% block content %}{% endblock %}
+            </section>
             {% if request.endpoint != 'index' %}
             <div class="button-container">
                 <a href="{{ url_for('index') }}" class="btn btn-secondary">Retour</a>
