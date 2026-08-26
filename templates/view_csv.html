@@ -366,110 +366,136 @@
             topScrollInner.width(scrollWidth);
         }
 
+        var activeColumnFilters = {};
+
+        function getFilterColumn(input) {
+            var column = $(input).closest('th').data('column');
+            if (column) {
+                return column;
+            }
+
+            var inputId = input.id || '';
+            if (inputId.indexOf('filter_') === 0) {
+                return inputId.substring('filter_'.length);
+            }
+
+            return '';
+        }
+
+        function refreshActiveColumnFilters() {
+            activeColumnFilters = {};
+
+            $('.csv-table-card .column-filter').each(function() {
+                var column = getFilterColumn(this);
+                var value = ($(this).val() || '').trim();
+                if (!column || !value) {
+                    return;
+                }
+
+                activeColumnFilters[column] = {
+                    isDate: $(this).hasClass('date-filter'),
+                    isSelect: $(this).is('select'),
+                    value: value
+                };
+            });
+        }
+
         // Gestionnaire d'événements pour les filtres
-        $('.column-filter').on('keyup change', function() {
+        $('.csv-table-card').on('input keyup change', '.column-filter', function() {
+            refreshActiveColumnFilters();
             table.draw();
         });
 
         // Filtre personnalisé pour gérer les opérateurs mathématiques
         $.fn.dataTable.ext.search.push(
             function(settings, data, dataIndex) {
-                var showRow = true;
+                if (settings.nTable !== table.table().node()) {
+                    return true;
+                }
+
                 var row = table.row(dataIndex).node();
 
-                $('#csvTable thead tr:eq(1) th').each(function(index) {
-                    if (index === 0 || index === 1) return; // Ignorer les colonnes de sélection et de miniature
+                for (var columnName in activeColumnFilters) {
+                    if (!Object.prototype.hasOwnProperty.call(activeColumnFilters, columnName)) {
+                        continue;
+                    }
 
-                    var input = $(this).find('.column-filter');
-                    if (input.length > 0) {
-                        var filterValue = input.val().trim();
+                    var filter = activeColumnFilters[columnName];
+                    var filterValue = filter.value;
+                    var dataValue = $(row).find('td[data-title="' + columnName + '"]').text().trim();
 
-                        if (filterValue) {
-                            // Récupérer la valeur de la cellule correspondante
-                            var dataValue = $(row).find('td').eq(index).text().trim();
+                    if (filter.isSelect) {
+                        if (filterValue !== dataValue) {
+                            return false;
+                        }
+                        continue;
+                    }
 
-                            if (input.is('select')) {
-                                // Pour les éléments select
-                                if (filterValue !== dataValue) {
-                                    showRow = false;
+                    var operatorMatch = filterValue.match(/^(<=|>=|=|<|>)(.*)$/);
+                    if (operatorMatch) {
+                        var operator = operatorMatch[1];
+                        var filterContent = operatorMatch[2].trim();
+
+                        if (filter.isDate) {
+                            var filterDate = new Date(filterContent);
+                            var dataDate = new Date(dataValue);
+
+                            if (isNaN(filterDate.getTime()) || isNaN(dataDate.getTime())) {
+                                return false;
+                            }
+
+                            switch (operator) {
+                                case '>':
+                                    if (!(dataDate > filterDate)) return false;
+                                    break;
+                                case '<':
+                                    if (!(dataDate < filterDate)) return false;
+                                    break;
+                                case '>=':
+                                    if (!(dataDate >= filterDate)) return false;
+                                    break;
+                                case '<=':
+                                    if (!(dataDate <= filterDate)) return false;
+                                    break;
+                                case '=':
+                                case '==':
+                                    if (dataDate.getTime() !== filterDate.getTime()) return false;
+                                    break;
+                                default:
                                     return false;
-                                }
-                            } else {
-                                // Pour les inputs text
-                                var operatorMatch = filterValue.match(/^(<=|>=|=|<|>)(.*)$/);
-                                if (operatorMatch) {
-                                    var operator = operatorMatch[1];
-                                    var filterContent = operatorMatch[2].trim();
+                            }
+                        } else {
+                            var filterNumber = parseFloat(filterContent);
+                            var dataNumber = parseFloat(dataValue.replace(/[^0-9\.-]+/g, ''));
+                            if (isNaN(dataNumber)) dataNumber = 0;
 
-                                    // Gérer les colonnes de date
-                                    if (input.hasClass('date-filter')) {
-                                        var filterDate = new Date(filterContent);
-                                        var dataDate = new Date(dataValue);
-
-                                        if (isNaN(filterDate.getTime()) || isNaN(dataDate.getTime())) {
-                                            showRow = false;
-                                            return false;
-                                        }
-
-                                        switch (operator) {
-                                            case '>':
-                                                if (!(dataDate > filterDate)) showRow = false;
-                                                break;
-                                            case '<':
-                                                if (!(dataDate < filterDate)) showRow = false;
-                                                break;
-                                            case '>=':
-                                                if (!(dataDate >= filterDate)) showRow = false;
-                                                break;
-                                            case '<=':
-                                                if (!(dataDate <= filterDate)) showRow = false;
-                                                break;
-                                            case '=':
-                                            case '==':
-                                                if (dataDate.getTime() !== filterDate.getTime()) showRow = false;
-                                                break;
-                                            default:
-                                                showRow = false;
-                                        }
-                                    } else {
-                                        // Gérer les colonnes numériques
-                                        var filterNumber = parseFloat(filterContent);
-                                        var dataNumber = parseFloat(dataValue.replace(/[^0-9\.-]+/g, ''));
-                                        if (isNaN(dataNumber)) dataNumber = 0;
-
-                                        switch (operator) {
-                                            case '>':
-                                                if (!(dataNumber > filterNumber)) showRow = false;
-                                                break;
-                                            case '<':
-                                                if (!(dataNumber < filterNumber)) showRow = false;
-                                                break;
-                                            case '>=':
-                                                if (!(dataNumber >= filterNumber)) showRow = false;
-                                                break;
-                                            case '<=':
-                                                if (!(dataNumber <= filterNumber)) showRow = false;
-                                                break;
-                                            case '=':
-                                            case '==':
-                                                if (!(dataNumber == filterNumber)) showRow = false;
-                                                break;
-                                            default:
-                                                showRow = false;
-                                        }
-                                    }
-                                } else {
-                                    // Recherche classique (sans opérateur)
-                                    if (dataValue.toLowerCase().indexOf(filterValue.toLowerCase()) === -1) {
-                                        showRow = false;
-                                        return false;
-                                    }
-                                }
+                            switch (operator) {
+                                case '>':
+                                    if (!(dataNumber > filterNumber)) return false;
+                                    break;
+                                case '<':
+                                    if (!(dataNumber < filterNumber)) return false;
+                                    break;
+                                case '>=':
+                                    if (!(dataNumber >= filterNumber)) return false;
+                                    break;
+                                case '<=':
+                                    if (!(dataNumber <= filterNumber)) return false;
+                                    break;
+                                case '=':
+                                case '==':
+                                    if (!(dataNumber == filterNumber)) return false;
+                                    break;
+                                default:
+                                    return false;
                             }
                         }
+                    } else if (dataValue.toLowerCase().indexOf(filterValue.toLowerCase()) === -1) {
+                        return false;
                     }
-                });
-                return showRow;
+                }
+
+                return true;
             }
         );
 
