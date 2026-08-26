@@ -5,16 +5,16 @@
 
 {% block content %}
     <div class="csv-page">
-    <div class="csv-page__header">
-        <div>
-            <h2>CSV - {{ csv_file }}</h2>
-            <p>{{ df|length }} éléments chargés</p>
+        <div class="csv-page__header">
+            <div>
+                <h2>CSV - {{ csv_file }}</h2>
+                <p>{{ df|length }} éléments chargés</p>
+            </div>
         </div>
-    </div>
 
-    <form method="post" id="csvForm">
-        <div class="csv-table-card">
-            <table class="table table-bordered" id="csvTable">
+        <form method="post" id="csvForm">
+            <div class="csv-table-card">
+                <table class="table table-bordered" id="csvTable">
                 <thead>
                     <tr>
                         <th><input type="checkbox" id="select_all"></th>
@@ -135,31 +135,31 @@
                         {% endfor %}
                     </tr>
                 </tfoot>
-            </table>
-        </div>
-
-        <!-- Boutons pour définir l'action sur les lignes sélectionnées -->
-        {% if csv_file in ['common_movies.csv', 'common_series.csv'] %}
-            <div class="action-buttons">
-                <button type="button" id="set_selected_d" class="btn btn-secondary">Définir les sélectionnés en suppression locale</button>
-                <button type="submit" class="btn btn-primary">Enregistrer les modifications</button>
+                </table>
             </div>
-        {% else %}
-            <div class="action-buttons">
-                <button type="button" id="set_selected_a" class="btn btn-secondary">Définir les sélectionnés en archive</button>
-                <button type="button" id="set_selected_d" class="btn btn-secondary">Définir les sélectionnés en suppression</button>
-                <button type="submit" class="btn btn-primary">Enregistrer les modifications</button>
-            </div>
-        {% endif %}
-    </form>
 
-    <!-- Boutons "Télécharger le CSV" et "Traiter le CSV" -->
-    <div class="action-buttons mt-3">
-        <a href="{{ url_for('download_csv', csv_file=csv_file) }}" class="btn btn-primary">Télécharger le CSV</a>
-        <form action="{{ url_for('process_csv', csv_file=csv_file) }}" method="post" style="display: inline;">
-            <button type="submit" class="btn btn-warning">Traiter le CSV</button>
+            <!-- Boutons pour définir l'action sur les lignes sélectionnées -->
+            {% if csv_file in ['common_movies.csv', 'common_series.csv'] %}
+                <div class="action-buttons">
+                    <button type="button" id="set_selected_d" class="btn btn-secondary">Définir les sélectionnés en suppression locale</button>
+                    <button type="submit" class="btn btn-primary">Enregistrer les modifications</button>
+                </div>
+            {% else %}
+                <div class="action-buttons">
+                    <button type="button" id="set_selected_a" class="btn btn-secondary">Définir les sélectionnés en archive</button>
+                    <button type="button" id="set_selected_d" class="btn btn-secondary">Définir les sélectionnés en suppression</button>
+                    <button type="submit" class="btn btn-primary">Enregistrer les modifications</button>
+                </div>
+            {% endif %}
         </form>
-    </div>
+
+        <!-- Boutons "Télécharger le CSV" et "Traiter le CSV" -->
+        <div class="action-buttons mt-3">
+            <a href="{{ url_for('download_csv', csv_file=csv_file) }}" class="btn btn-primary">Télécharger le CSV</a>
+            <form action="{{ url_for('process_csv', csv_file=csv_file) }}" method="post" style="display: inline;">
+                <button type="submit" class="btn btn-warning">Traiter le CSV</button>
+            </form>
+        </div>
     </div>
 
     <!-- Modal pour afficher les informations de l'élément -->
@@ -238,6 +238,10 @@
             ],
             "initComplete": function() {
                 $('.dataTables_scrollBody').attr('tabindex', '0');
+                this.api().columns.adjust();
+                window.setTimeout(function() {
+                    table.columns.adjust();
+                }, 0);
             },
             "footerCallback": function ( row, data, start, end, display ) {
                 var api = this.api();
@@ -320,6 +324,10 @@
         // Charger les images lors du changement de page, de tri ou de recherche
         table.on('draw', function() {
             loadVisibleImages();
+        });
+
+        $(window).on('resize', function() {
+            table.columns.adjust();
         });
 
         // Gestionnaire d'événements pour les filtres

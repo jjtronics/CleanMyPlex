@@ -220,6 +220,7 @@ a:hover {
     min-width: 0;
     flex: 1;
     flex-direction: column;
+    overflow-x: hidden;
 }
 
 .topbar {
@@ -276,6 +277,7 @@ a:hover {
     max-width: 1480px;
     margin: 0 auto;
     padding: 1.25rem;
+    min-width: 0;
 }
 
 .content-panel {
@@ -284,6 +286,20 @@ a:hover {
     background: var(--panel-bg);
     box-shadow: var(--panel-shadow);
     padding: 1.15rem;
+    min-width: 0;
+}
+
+.app-main--view_csv {
+    max-width: none;
+    margin: 0;
+    padding: 0.9rem;
+}
+
+.content-panel--view_csv {
+    width: 100%;
+    max-width: none;
+    overflow: hidden;
+    padding: 0.9rem;
 }
 
 h2 {
@@ -475,6 +491,19 @@ select[multiple] {
 .csv-page {
     display: grid;
     gap: 1rem;
+    width: 100%;
+    min-width: 0;
+}
+
+.csv-page form,
+.csv-page .dataTables_wrapper,
+.csv-page .dataTables_scroll,
+.csv-page .dataTables_scrollHead,
+.csv-page .dataTables_scrollBody,
+.csv-page .dataTables_scrollFoot {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0;
 }
 
 .csv-page__header {
@@ -495,6 +524,9 @@ select[multiple] {
 }
 
 .csv-table-card {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
     overflow: hidden;
     border: 1px solid var(--border-subtle);
     border-radius: 12px;
@@ -553,8 +585,11 @@ select[multiple] {
 }
 
 .csv-table-card .dataTables_scrollBody {
+    width: 100% !important;
+    max-width: 100% !important;
     border: 0 !important;
     background: rgba(8, 13, 24, 0.72) !important;
+    overflow: auto !important;
     overscroll-behavior: contain;
     scrollbar-color: rgba(56, 189, 248, 0.68) rgba(16, 24, 39, 0.95);
     scrollbar-width: thin;
@@ -592,6 +627,12 @@ select[multiple] {
     margin: 0 !important;
     border-spacing: 0;
     background: transparent !important;
+    min-width: 100%;
+}
+
+.csv-table-card .dataTables_scrollHeadInner,
+.csv-table-card .dataTables_scrollFootInner {
+    min-width: 100%;
 }
 
 .csv-table-card table.dataTable thead th,

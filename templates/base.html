@@ -96,7 +96,7 @@
             </div>
         </header>
 
-        <main class="app-main">
+        <main class="app-main app-main--{{ endpoint }}">
             <div class="alert-container" id="notifications">
                 {% with messages = get_flashed_messages(with_categories=true) %}
                     {% if messages %}
@@ -122,7 +122,7 @@
             <!-- Conteneur pour les notifications dynamiques -->
             <div id="dynamic-notifications"></div>
 
-            <section class="content-panel">
+            <section class="content-panel content-panel--{{ endpoint }}">
                 {% block content %}{% endblock %}
             </section>
             {% if request.endpoint != 'index' %}
