@@ -534,6 +534,38 @@ select[multiple] {
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
+.csv-top-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    height: 16px;
+    border-bottom: 1px solid var(--border-subtle);
+    background: rgba(11, 17, 32, 0.96);
+    scrollbar-color: rgba(56, 189, 248, 0.78) rgba(16, 24, 39, 0.98);
+    scrollbar-width: thin;
+}
+
+.csv-top-scroll > div {
+    height: 1px;
+}
+
+.csv-top-scroll::-webkit-scrollbar {
+    height: 12px;
+}
+
+.csv-top-scroll::-webkit-scrollbar-track {
+    background: rgba(16, 24, 39, 0.98);
+}
+
+.csv-top-scroll::-webkit-scrollbar-thumb {
+    border: 3px solid rgba(16, 24, 39, 0.98);
+    border-radius: 999px;
+    background: rgba(56, 189, 248, 0.78);
+}
+
+.csv-top-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(20, 184, 166, 0.9);
+}
+
 .csv-table-card #csvTable,
 .csv-table-card #csvTable.table {
     --bs-table-bg: #0b1120;
@@ -567,7 +599,7 @@ select[multiple] {
     justify-content: space-between;
     gap: 0.75rem;
     padding: 0.75rem;
-    color: var(--color-text-secondary);
+    color: #dbeafe;
 }
 
 .csv-table-controls {
@@ -577,7 +609,7 @@ select[multiple] {
 
 .csv-table-footer {
     border-top: 1px solid var(--border-subtle);
-    background: rgba(16, 24, 39, 0.84);
+    background: rgba(11, 17, 32, 0.96);
 }
 
 .csv-table-controls label,
@@ -670,6 +702,67 @@ select[multiple] {
     height: 2.7rem;
 }
 
+.csv-table-card table.dataTable thead th[data-column="select"],
+.csv-table-card table.dataTable tbody td:first-child {
+    width: 3.2rem !important;
+    min-width: 3.2rem !important;
+    max-width: 3.2rem !important;
+    text-align: center;
+}
+
+.csv-table-card table.dataTable thead th[data-column="miniature"],
+.csv-table-card table.dataTable tbody td:nth-child(2) {
+    width: 5.1rem !important;
+    min-width: 5.1rem !important;
+    max-width: 5.1rem !important;
+    text-align: center;
+}
+
+.csv-table-card table.dataTable thead th[data-column="title"],
+.csv-table-card table.dataTable tbody td[data-title="title"] {
+    width: 22rem !important;
+    min-width: 22rem !important;
+}
+
+.csv-table-card table.dataTable thead th[data-column="local_path"],
+.csv-table-card table.dataTable tbody td[data-title="local_path"] {
+    width: 30rem !important;
+    min-width: 30rem !important;
+}
+
+.csv-table-card table.dataTable thead th[data-column="Action"],
+.csv-table-card table.dataTable tbody td[data-title="Action"] {
+    width: 8rem !important;
+    min-width: 8rem !important;
+    text-align: center;
+}
+
+.csv-table-card table.dataTable thead th[data-column="rating"],
+.csv-table-card table.dataTable thead th[data-column="plex_rating"],
+.csv-table-card table.dataTable thead th[data-column="view_count"],
+.csv-table-card table.dataTable tbody td[data-title="rating"],
+.csv-table-card table.dataTable tbody td[data-title="plex_rating"],
+.csv-table-card table.dataTable tbody td[data-title="view_count"] {
+    width: 7rem !important;
+    min-width: 7rem !important;
+}
+
+.csv-table-card table.dataTable thead th[data-column="file_size"],
+.csv-table-card table.dataTable thead th[data-column="local_file_size"],
+.csv-table-card table.dataTable thead th[data-column="remote_file_size"],
+.csv-table-card table.dataTable thead th[data-column="largest_file_size"],
+.csv-table-card table.dataTable thead th[data-column="added_at"],
+.csv-table-card table.dataTable thead th[data-column="release_date"],
+.csv-table-card table.dataTable tbody td[data-title="file_size"],
+.csv-table-card table.dataTable tbody td[data-title="local_file_size"],
+.csv-table-card table.dataTable tbody td[data-title="remote_file_size"],
+.csv-table-card table.dataTable tbody td[data-title="largest_file_size"],
+.csv-table-card table.dataTable tbody td[data-title="added_at"],
+.csv-table-card table.dataTable tbody td[data-title="release_date"] {
+    width: 10rem !important;
+    min-width: 10rem !important;
+}
+
 .csv-table-card table.dataTable thead tr:nth-child(2) th {
     padding-top: 0.48rem !important;
     padding-bottom: 0.48rem !important;
@@ -711,6 +804,13 @@ select[multiple] {
     background: transparent !important;
     color: var(--color-text);
     font-size: 0.84rem;
+    line-height: 1.35;
+}
+
+.csv-table-card table.dataTable tbody td[data-title="local_path"] {
+    color: #93c5fd;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 0.76rem;
 }
 
 .csv-table-card table.dataTable.display tbody tr,
@@ -739,11 +839,6 @@ select[multiple] {
 
 .csv-table-card table.dataTable tbody tr:hover {
     background: rgba(56, 189, 248, 0.08) !important;
-}
-
-.csv-table-card table.dataTable tbody td[data-title="title"],
-.csv-table-card table.dataTable tbody td[data-title="local_path"] {
-    min-width: 18rem;
 }
 
 .csv-table-card table.dataTable tbody td[data-title="summary"] {
@@ -776,6 +871,34 @@ select[multiple] {
     background: rgba(16, 24, 39, 0.92);
     padding: 0.75rem;
     backdrop-filter: blur(12px);
+}
+
+.csv-table-footer .dataTables_info {
+    color: #dbeafe !important;
+    font-weight: 650;
+}
+
+.csv-table-footer .dataTables_paginate {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.dataTables_wrapper .dataTables_length label,
+.dataTables_wrapper .dataTables_filter label {
+    color: #dbeafe !important;
+}
+
+.dataTables_wrapper .dataTables_length select,
+.dataTables_wrapper .dataTables_filter input {
+    color: #f8fafc !important;
+    background-color: #0b1120 !important;
+}
+
+.dataTables_wrapper .dataTables_length select option {
+    color: #0f172a;
+    background: #f8fafc;
 }
 
 table,
@@ -820,14 +943,14 @@ table tfoot th {
 }
 
 .dataTables_wrapper {
-    color: var(--color-text-secondary);
+    color: #dbeafe !important;
 }
 
 .dataTables_wrapper .dataTables_length,
 .dataTables_wrapper .dataTables_filter,
 .dataTables_wrapper .dataTables_info,
 .dataTables_wrapper .dataTables_paginate {
-    color: var(--color-text-secondary) !important;
+    color: #dbeafe !important;
     margin: 0.65rem 0;
 }
 
@@ -840,13 +963,15 @@ table tfoot th {
 .dataTables_wrapper .dataTables_paginate .paginate_button {
     border: 1px solid transparent !important;
     border-radius: 7px !important;
+    background: transparent !important;
     color: #bae6fd !important;
+    box-shadow: none !important;
 }
 
 .dataTables_wrapper .dataTables_paginate .paginate_button.current,
 .dataTables_wrapper .dataTables_paginate .paginate_button.current:hover {
     border-color: var(--border-medium) !important;
-    background: rgba(56, 189, 248, 0.18) !important;
+    background: rgba(56, 189, 248, 0.22) !important;
     color: #ffffff !important;
 }
 
@@ -854,6 +979,19 @@ table tfoot th {
     border-color: var(--border-subtle) !important;
     background: rgba(56, 189, 248, 0.12) !important;
     color: #ffffff !important;
+}
+
+.dataTables_wrapper .dataTables_paginate .paginate_button.disabled,
+.dataTables_wrapper .dataTables_paginate .paginate_button.disabled:hover,
+.dataTables_wrapper .dataTables_paginate .paginate_button.disabled:active {
+    border-color: transparent !important;
+    background: transparent !important;
+    color: #64748b !important;
+    cursor: not-allowed !important;
+}
+
+.dataTables_wrapper .dataTables_paginate span {
+    color: #94a3b8 !important;
 }
 
 .column-filter {
@@ -915,6 +1053,26 @@ table th.file_size,
 table td.file_size {
     width: 100px;
     white-space: nowrap;
+}
+
+.csv-table-card table.dataTable tbody td[data-title="rating"],
+.csv-table-card table.dataTable tbody td[data-title="plex_rating"],
+.csv-table-card table.dataTable tbody td[data-title="view_count"] {
+    width: 7rem !important;
+}
+
+.csv-table-card table.dataTable tbody td[data-title="local_path"] {
+    width: 30rem !important;
+    max-width: 30rem !important;
+}
+
+.csv-table-card table.dataTable tbody td[data-title="file_size"],
+.csv-table-card table.dataTable tbody td[data-title="local_file_size"],
+.csv-table-card table.dataTable tbody td[data-title="remote_file_size"],
+.csv-table-card table.dataTable tbody td[data-title="largest_file_size"],
+.csv-table-card table.dataTable tbody td[data-title="added_at"],
+.csv-table-card table.dataTable tbody td[data-title="release_date"] {
+    width: 10rem !important;
 }
 
 @media (max-width: 920px) {

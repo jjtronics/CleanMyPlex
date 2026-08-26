@@ -17,30 +17,30 @@
                 <table class="table table-bordered" id="csvTable">
                 <thead>
                     <tr>
-                        <th><input type="checkbox" id="select_all"></th>
-                        <th>Miniature</th>
+                        <th data-column="select"><input type="checkbox" id="select_all"></th>
+                        <th data-column="miniature">Miniature</th>
                         {% for title in titles %}
                             {% if title != 'poster_url' and title not in ['summary', 'genres', 'directors', 'actors'] %}
-                                <th>{{ title }}</th>
+                                <th data-column="{{ title }}">{{ title }}</th>
                             {% endif %}
                         {% endfor %}
                     </tr>
                     <!-- Ligne des filtres -->
-                    <tr>
-                        <th></th>
-                        <th></th>
+                    <tr class="csv-filter-row">
+                        <th data-column="select"></th>
+                        <th data-column="miniature"></th>
                         {% for title in titles %}
                             {% if title != 'poster_url' and title not in ['summary', 'genres', 'directors', 'actors'] %}
                                 {% if title in ["rating", "plex_rating", "view_count", "file_size", "local_file_size", "remote_file_size", "largest_file_size"] %}
-                                    <th>
+                                    <th data-column="{{ title }}">
                                         <input type="text" id="filter_{{ title }}" placeholder="Filtrer {{ title }}" class="column-filter">
                                     </th>
                                 {% elif title in ["added_at", "release_date"] %}
-                                    <th>
+                                    <th data-column="{{ title }}">
                                         <input type="text" id="filter_{{ title }}" placeholder="Filtrer {{ title }} (yyyy-mm-dd)" class="column-filter date-filter">
                                     </th>
                                 {% elif title == "Bibliothèque" %}
-                                    <th>
+                                    <th data-column="{{ title }}">
                                         <select id="filter_{{ title }}" class="column-filter">
                                             <option value="">Tous</option>
                                             {% for lib in unique_libraries %}
@@ -49,7 +49,7 @@
                                         </select>
                                     </th>
                                 {% elif title == "Action" %}
-                                    <th>
+                                    <th data-column="{{ title }}">
                                         <select id="filter_{{ title }}" class="column-filter">
                                             <option value="">Tous</option>
                                             {% for action in unique_actions %}
@@ -60,11 +60,11 @@
                                         </select>
                                     </th>
                                 {% elif title == "title" or title == "local_path" %}
-                                    <th>
+                                    <th data-column="{{ title }}">
                                         <input type="text" id="filter_{{ title }}" placeholder="Filtrer {{ title }}" class="column-filter">
                                     </th>
                                 {% else %}
-                                    <th><input type="text" id="filter_{{ title }}" placeholder="Filtrer {{ title }}" class="column-filter"></th>
+                                    <th data-column="{{ title }}"><input type="text" id="filter_{{ title }}" placeholder="Filtrer {{ title }}" class="column-filter"></th>
                                 {% endif %}
                             {% endif %}
                         {% endfor %}
@@ -239,9 +239,11 @@
             ],
             "initComplete": function() {
                 $('.dataTables_scrollBody').attr('tabindex', '0');
+                installCsvHorizontalScroll();
                 this.api().columns.adjust();
                 window.setTimeout(function() {
                     table.columns.adjust();
+                    syncCsvHorizontalScrollWidth();
                 }, 0);
             },
             "footerCallback": function ( row, data, start, end, display ) {
@@ -325,11 +327,44 @@
         // Charger les images lors du changement de page, de tri ou de recherche
         table.on('draw', function() {
             loadVisibleImages();
+            syncCsvHorizontalScrollWidth();
         });
 
         $(window).on('resize', function() {
             table.columns.adjust();
+            syncCsvHorizontalScrollWidth();
         });
+
+        function installCsvHorizontalScroll() {
+            var scrollBody = $('.dataTables_scrollBody');
+            if (!scrollBody.length || $('.csv-top-scroll').length) {
+                return;
+            }
+
+            var topScroll = $('<div class="csv-top-scroll" aria-hidden="true"><div></div></div>');
+            $('.dataTables_scroll').before(topScroll);
+
+            topScroll.on('scroll', function() {
+                scrollBody.scrollLeft(this.scrollLeft);
+            });
+
+            scrollBody.on('scroll', function() {
+                topScroll.scrollLeft(this.scrollLeft);
+            });
+
+            syncCsvHorizontalScrollWidth();
+        }
+
+        function syncCsvHorizontalScrollWidth() {
+            var scrollBody = $('.dataTables_scrollBody');
+            var topScrollInner = $('.csv-top-scroll > div');
+            if (!scrollBody.length || !topScrollInner.length) {
+                return;
+            }
+
+            var scrollWidth = scrollBody.get(0).scrollWidth || scrollBody.find('table').outerWidth() || 0;
+            topScrollInner.width(scrollWidth);
+        }
 
         // Gestionnaire d'événements pour les filtres
         $('.column-filter').on('keyup change', function() {
