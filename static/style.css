@@ -534,6 +534,31 @@ select[multiple] {
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
+.csv-table-card #csvTable,
+.csv-table-card #csvTable.table {
+    --bs-table-bg: #0b1120;
+    --bs-table-color: var(--color-text);
+    --bs-table-striped-bg: rgba(16, 24, 39, 0.52);
+    --bs-table-striped-color: var(--color-text);
+    --bs-table-hover-bg: rgba(56, 189, 248, 0.1);
+    --bs-table-hover-color: #ffffff;
+    --bs-table-border-color: rgba(56, 189, 248, 0.11);
+    width: 100% !important;
+    margin: 0 !important;
+    background: #0b1120 !important;
+    color: var(--color-text) !important;
+}
+
+.csv-table-card #csvTable thead,
+.csv-table-card #csvTable tbody,
+.csv-table-card #csvTable tfoot,
+.csv-table-card #csvTable tr,
+.csv-table-card #csvTable th,
+.csv-table-card #csvTable td {
+    background-color: transparent !important;
+    color: inherit;
+}
+
 .csv-table-controls,
 .csv-table-footer {
     display: flex;
@@ -646,10 +671,39 @@ select[multiple] {
 }
 
 .csv-table-card table.dataTable thead tr:nth-child(2) th {
-    top: 2.7rem;
     padding-top: 0.48rem !important;
     padding-bottom: 0.48rem !important;
     background: #172033 !important;
+}
+
+.csv-table-card table.dataTable thead tr:first-child th {
+    padding-right: 1.45rem !important;
+    cursor: pointer;
+}
+
+.csv-table-card table.dataTable thead tr:nth-child(2) th {
+    cursor: default;
+}
+
+.csv-table-card table.dataTable thead tr:nth-child(2) th::before,
+.csv-table-card table.dataTable thead tr:nth-child(2) th::after {
+    display: none !important;
+}
+
+.csv-table-card table.dataTable thead .sorting::before,
+.csv-table-card table.dataTable thead .sorting::after,
+.csv-table-card table.dataTable thead .sorting_asc::before,
+.csv-table-card table.dataTable thead .sorting_asc::after,
+.csv-table-card table.dataTable thead .sorting_desc::before,
+.csv-table-card table.dataTable thead .sorting_desc::after {
+    color: #bae6fd !important;
+    opacity: 0.45 !important;
+}
+
+.csv-table-card table.dataTable thead .sorting_asc::before,
+.csv-table-card table.dataTable thead .sorting_desc::after {
+    color: #fbbf24 !important;
+    opacity: 1 !important;
 }
 
 .csv-table-card table.dataTable tbody td {
