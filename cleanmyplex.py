@@ -618,10 +618,20 @@ def get_active_sessions():
 
         for session in sessions:
             last_active = session.startedAt.strftime('%Y-%m-%d %H:%M:%S') if hasattr(session, 'startedAt') and session.startedAt else 'Inconnu'
+            player = session.players[0] if session.players else None
             session_info = {
                 'username': session.usernames[0] if session.usernames else 'Inconnu',
-                'publicAddress': session.players[0].address if session.players else 'N/A',
-                'last_active': last_active
+                'publicAddress': getattr(player, 'address', 'N/A') if player else 'N/A',
+                'last_active': last_active,
+                'media_title': getattr(session, 'title', 'N/A'),
+                'media_type': getattr(session, 'type', 'N/A'),
+                'grandparent_title': getattr(session, 'grandparentTitle', 'N/A'),
+                'parent_title': getattr(session, 'parentTitle', 'N/A'),
+                'year': getattr(session, 'year', 'N/A'),
+                'player_title': getattr(player, 'title', 'N/A') if player else 'N/A',
+                'player_product': getattr(player, 'product', 'N/A') if player else 'N/A',
+                'player_platform': getattr(player, 'platform', 'N/A') if player else 'N/A',
+                'player_state': getattr(player, 'state', 'N/A') if player else 'N/A',
             }
             session_data.append(session_info)
 
@@ -645,6 +655,25 @@ def get_view_history(user):
     except Exception as e:
         flash(f"Erreur lors de la récupération de l'historique de lecture : {e}", 'danger')
         return []
+
+
+def safe_user_attr(user, *names, default='N/A'):
+    for name in names:
+        if hasattr(user, name):
+            value = getattr(user, name)
+            if value not in [None, '']:
+                return value
+    return default
+
+
+def display_value(value):
+    if value in [None, '']:
+        return 'N/A'
+    if isinstance(value, (list, tuple, set)):
+        return ', '.join(str(item) for item in value) if value else 'N/A'
+    if isinstance(value, dict):
+        return ', '.join(f'{key}: {val}' for key, val in value.items()) if value else 'N/A'
+    return str(value)
 
 def get_last_activity(user):
     try:
@@ -1196,13 +1225,24 @@ def user_details(username):
 
         user_info = {
             'username': user.username,
-            'email': user.email if hasattr(user, 'email') else 'N/A',
-            'title': user.title if hasattr(user, 'title') else 'N/A',
-            'userID': user.id,
-            'homeUser': 'Oui' if user.home else 'Non',
+            'email': safe_user_attr(user, 'email'),
+            'title': safe_user_attr(user, 'title'),
+            'userID': safe_user_attr(user, 'id'),
+            'uuid': safe_user_attr(user, 'uuid'),
+            'homeUser': 'Oui' if safe_user_attr(user, 'home', default=False) else 'Non',
+            'restricted': 'Oui' if safe_user_attr(user, 'restricted', default=False) else 'Non',
+            'allowSync': 'Oui' if safe_user_attr(user, 'allowSync', default=False) else 'Non',
+            'allowChannels': 'Oui' if safe_user_attr(user, 'allowChannels', default=False) else 'Non',
+            'allowCameraUpload': 'Oui' if safe_user_attr(user, 'allowCameraUpload', default=False) else 'Non',
+            'filterAll': display_value(safe_user_attr(user, 'filterAll')),
+            'filterMovies': display_value(safe_user_attr(user, 'filterMovies')),
+            'filterMusic': display_value(safe_user_attr(user, 'filterMusic')),
+            'filterPhotos': display_value(safe_user_attr(user, 'filterPhotos')),
+            'filterTelevision': display_value(safe_user_attr(user, 'filterTelevision')),
             'publicAddress': session_info['publicAddress'] if session_info else 'N/A',
-            'subscriptionType': user.subscriptionType if hasattr(user, 'subscriptionType') else 'Gratuit',
-            'is_active': "Oui" if session_info else "Non"
+            'subscriptionType': safe_user_attr(user, 'subscriptionType', default='Gratuit'),
+            'is_active': "Oui" if session_info else "Non",
+            'session': session_info,
         }
 
         return render_template('user_details.html', user=user_info)

@@ -947,12 +947,40 @@ select[multiple] {
     padding: 0.9rem;
 }
 
+.detail-card--wide {
+    grid-column: span 2;
+}
+
 .detail-card span {
     margin-bottom: 0.3rem;
     color: var(--color-text-muted);
     font-size: 0.72rem;
     font-weight: 800;
     text-transform: uppercase;
+}
+
+.detail-card strong {
+    overflow-wrap: anywhere;
+}
+
+.empty-state {
+    display: grid;
+    gap: 0.2rem;
+    border: 1px dashed rgba(125, 211, 252, 0.24);
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.56);
+    color: var(--color-text);
+    padding: 1rem;
+}
+
+.empty-state strong {
+    color: #ffffff;
+    font-size: 0.95rem;
+}
+
+.empty-state span {
+    color: var(--color-text-secondary);
+    font-size: 0.82rem;
 }
 
 .input-action {
@@ -1738,6 +1766,10 @@ table td.file_size {
 
     .settings-grid .settings-card:nth-child(2) {
         grid-row: auto;
+    }
+
+    .detail-card--wide {
+        grid-column: auto;
     }
 
     .dataset-row {

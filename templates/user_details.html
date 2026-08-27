@@ -26,6 +26,10 @@
         <strong>{{ user.userID }}</strong>
     </div>
     <div class="detail-card">
+        <span>UUID</span>
+        <strong>{{ user.uuid }}</strong>
+    </div>
+    <div class="detail-card">
         <span>Plex Home</span>
         <strong>{{ user.homeUser }}</strong>
     </div>
@@ -42,6 +46,111 @@
         <strong>{{ user.is_active }}</strong>
     </div>
 </div>
+
+<div class="section-header">
+    <h2>Permissions</h2>
+    <span>Valeurs exposées par le compte Plex partagé.</span>
+</div>
+
+<div class="detail-grid">
+    <div class="detail-card">
+        <span>Compte restreint</span>
+        <strong>{{ user.restricted }}</strong>
+    </div>
+    <div class="detail-card">
+        <span>Sync autorisée</span>
+        <strong>{{ user.allowSync }}</strong>
+    </div>
+    <div class="detail-card">
+        <span>Channels autorisés</span>
+        <strong>{{ user.allowChannels }}</strong>
+    </div>
+    <div class="detail-card">
+        <span>Upload caméra</span>
+        <strong>{{ user.allowCameraUpload }}</strong>
+    </div>
+</div>
+
+<div class="section-header">
+    <h2>Filtres du compte</h2>
+    <span>Restrictions déclarées côté Plex quand elles existent.</span>
+</div>
+
+<div class="detail-grid">
+    <div class="detail-card">
+        <span>Tous médias</span>
+        <strong>{{ user.filterAll }}</strong>
+    </div>
+    <div class="detail-card">
+        <span>Films</span>
+        <strong>{{ user.filterMovies }}</strong>
+    </div>
+    <div class="detail-card">
+        <span>Séries</span>
+        <strong>{{ user.filterTelevision }}</strong>
+    </div>
+    <div class="detail-card">
+        <span>Musique</span>
+        <strong>{{ user.filterMusic }}</strong>
+    </div>
+    <div class="detail-card">
+        <span>Photos</span>
+        <strong>{{ user.filterPhotos }}</strong>
+    </div>
+</div>
+
+<div class="section-header">
+    <h2>Session active</h2>
+    <span>Présent uniquement si l’utilisateur lit quelque chose maintenant.</span>
+</div>
+
+{% if user.session %}
+    <div class="detail-grid">
+        <div class="detail-card detail-card--wide">
+            <span>Média</span>
+            <strong>
+                {% if user.session.grandparent_title != 'N/A' %}
+                    {{ user.session.grandparent_title }} - {{ user.session.parent_title }} - {{ user.session.media_title }}
+                {% else %}
+                    {{ user.session.media_title }}
+                {% endif %}
+            </strong>
+        </div>
+        <div class="detail-card">
+            <span>Type</span>
+            <strong>{{ user.session.media_type }}</strong>
+        </div>
+        <div class="detail-card">
+            <span>Année</span>
+            <strong>{{ user.session.year }}</strong>
+        </div>
+        <div class="detail-card">
+            <span>Lecteur</span>
+            <strong>{{ user.session.player_title }}</strong>
+        </div>
+        <div class="detail-card">
+            <span>Application</span>
+            <strong>{{ user.session.player_product }}</strong>
+        </div>
+        <div class="detail-card">
+            <span>Plateforme</span>
+            <strong>{{ user.session.player_platform }}</strong>
+        </div>
+        <div class="detail-card">
+            <span>État</span>
+            <strong>{{ user.session.player_state }}</strong>
+        </div>
+        <div class="detail-card">
+            <span>Début</span>
+            <strong>{{ user.session.last_active }}</strong>
+        </div>
+    </div>
+{% else %}
+    <div class="empty-state">
+        <strong>Aucune session active</strong>
+        <span>Cet utilisateur ne lit rien actuellement sur le serveur Plex.</span>
+    </div>
+{% endif %}
 
 <div class="form-action-bar">
     <a href="{{ url_for('manage_users') }}" class="btn btn-secondary">Retour aux utilisateurs</a>
