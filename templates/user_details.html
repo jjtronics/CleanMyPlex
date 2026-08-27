@@ -2,20 +2,48 @@
 
 {% block title %}Détails de l'utilisateur - {{ user.username }}{% endblock %}
 
+{% block header_title %}Utilisateur{% endblock %}
+
+{% block header_subtitle %}Détails du compte Plex et état d’activité connu.{% endblock %}
+
 {% block content %}
-<h2>Détails de l'utilisateur : {{ user.username }}</h2>
-<div class="row">
-    <div class="col-md-6">
-        <p><strong>Nom d'utilisateur :</strong> {{ user.username }}</p>
-        <p><strong>Adresse email :</strong> {{ user.email }}</p>
-        <p><strong>Titre complet :</strong> {{ user.title }}</p>
-        <p><strong>ID utilisateur :</strong> {{ user.userID }}</p>
-        <p><strong>Membre de Plex Home :</strong> {{ user.homeUser }}</p>
-        <p><strong>Adresse IP :</strong> {{ user.publicAddress }}</p>
-        <p><strong>Type de compte :</strong> {{ user.subscriptionType }}</p>
-        <p><strong>Actif :</strong> {{ user.is_active }}</p>
+<div class="detail-hero">
+    <div class="detail-hero__avatar">{{ user.username[:1]|upper }}</div>
+    <div>
+        <span class="dataset-card__label">Compte Plex</span>
+        <h2>{{ user.username }}</h2>
+        <p>{{ user.title }}</p>
     </div>
 </div>
 
-<a href="{{ url_for('manage_users') }}" class="btn btn-secondary">Retour à la liste des utilisateurs</a>
+<div class="detail-grid">
+    <div class="detail-card">
+        <span>Email</span>
+        <strong>{{ user.email }}</strong>
+    </div>
+    <div class="detail-card">
+        <span>ID utilisateur</span>
+        <strong>{{ user.userID }}</strong>
+    </div>
+    <div class="detail-card">
+        <span>Plex Home</span>
+        <strong>{{ user.homeUser }}</strong>
+    </div>
+    <div class="detail-card">
+        <span>Adresse IP</span>
+        <strong>{{ user.publicAddress }}</strong>
+    </div>
+    <div class="detail-card">
+        <span>Type de compte</span>
+        <strong>{{ user.subscriptionType }}</strong>
+    </div>
+    <div class="detail-card">
+        <span>Actif</span>
+        <strong>{{ user.is_active }}</strong>
+    </div>
+</div>
+
+<div class="form-action-bar">
+    <a href="{{ url_for('manage_users') }}" class="btn btn-secondary">Retour aux utilisateurs</a>
+</div>
 {% endblock %}

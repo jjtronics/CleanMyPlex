@@ -4,56 +4,85 @@
 
 {% block header_title %}Paramètres{% endblock %}
 
+{% block header_subtitle %}Configurer le serveur Plex, l’authentification et le serveur ami pour les comparaisons.{% endblock %}
+
 {% block content %}
-    <form method="post" id="settings-form">
-        <div class="form-group">
-            <label for="PLEX_URL">Plex URL:</label>
-            <input type="text" class="form-control" id="PLEX_URL" name="PLEX_URL" value="{{ config.PLEX_URL }}" required>
-        </div>
-        <div class="form-group">
-            <label for="PLEX_TOKEN">Plex Token:</label>
-            <input type="text" class="form-control" id="PLEX_TOKEN" name="PLEX_TOKEN" value="{{ config.PLEX_TOKEN }}">
-            <button type="button" class="btn btn-secondary" id="test-token">Tester le token</button>
-            <div id="token-test-result" style="margin-top: 10px;"></div>
-        </div>
-        <div class="form-group">
-            <label for="PLEX_USERNAME">Plex Username:</label>
-            <input type="text" class="form-control" id="PLEX_USERNAME" name="PLEX_USERNAME" value="{{ config.PLEX_USERNAME }}">
-        </div>
-        <div class="form-group">
-            <label for="PLEX_PASSWORD">Plex Password:</label>
-            <input type="password" class="form-control" id="PLEX_PASSWORD" name="PLEX_PASSWORD" value="{{ config.PLEX_PASSWORD }}">
-            <button type="button" class="btn btn-secondary" id="test-login">Tester le login</button>
-            <div id="login-test-result" style="margin-top: 10px;"></div>
-        </div>
-        <div id="auth-validation-result" class="alert alert-danger" style="display: none; margin-top: 10px;">
-            Renseignez soit un token Plex, soit un couple username/password.
-        </div>
-        
-        <div class="form-group">
-            <label for="FRIEND_SERVER_NAME">Nom du serveur Plex de l'ami:</label>
-            <input
-                type="text"
-                class="form-control"
-                id="FRIEND_SERVER_NAME"
-                name="friend_server_name"
-                list="friend-server-suggestions"
-                value="{{ config.FRIEND_SERVER_NAME }}"
-                placeholder="Nom exact du serveur Plex à comparer"
-            >
-            <datalist id="friend-server-suggestions">
-                {% for server in friend_server_names %}
-                    <option value="{{ server }}">
-                {% endfor %}
-            </datalist>
-            {% if not friend_server_names %}
-                <small class="form-text text-muted">
-                    Aucun serveur n'a pu être chargé pour le moment. Vous pouvez saisir le nom manuellement, puis retester après correction des identifiants.
-                </small>
-            {% endif %}
+    <form method="post" id="settings-form" class="settings-grid">
+        <div class="settings-card">
+            <div class="section-header section-header--compact">
+                <h2>Serveur Plex</h2>
+                <span>URL locale ou distante du serveur à administrer.</span>
+            </div>
+            <div class="form-group">
+                <label for="PLEX_URL">URL Plex</label>
+                <input type="text" class="form-control" id="PLEX_URL" name="PLEX_URL" value="{{ config.PLEX_URL }}" required>
+            </div>
         </div>
 
-        <button type="submit" class="btn btn-primary">Mettre à jour les paramètres</button>
+        <div class="settings-card">
+            <div class="section-header section-header--compact">
+                <h2>Authentification</h2>
+                <span>Avec MFA, privilégie le token Plex.</span>
+            </div>
+            <div class="form-group">
+                <label for="PLEX_TOKEN">Token Plex</label>
+                <div class="input-action">
+                    <input type="text" class="form-control" id="PLEX_TOKEN" name="PLEX_TOKEN" value="{{ config.PLEX_TOKEN }}">
+                    <button type="button" class="btn btn-secondary" id="test-token">Tester</button>
+                </div>
+                <div id="token-test-result" class="test-result"></div>
+            </div>
+
+            <div class="paired-fields">
+                <div class="form-group">
+                    <label for="PLEX_USERNAME">Username Plex</label>
+                    <input type="text" class="form-control" id="PLEX_USERNAME" name="PLEX_USERNAME" value="{{ config.PLEX_USERNAME }}">
+                </div>
+                <div class="form-group">
+                    <label for="PLEX_PASSWORD">Password Plex</label>
+                    <input type="password" class="form-control" id="PLEX_PASSWORD" name="PLEX_PASSWORD" value="{{ config.PLEX_PASSWORD }}">
+                </div>
+            </div>
+            <button type="button" class="btn btn-secondary" id="test-login">Tester le login</button>
+            <div id="login-test-result" class="test-result"></div>
+
+            <div id="auth-validation-result" class="alert alert-danger auth-validation">
+                Renseigne un token Plex ou un couple username/password.
+            </div>
+        </div>
+
+        <div class="settings-card">
+            <div class="section-header section-header--compact">
+                <h2>Comparaison</h2>
+                <span>Nom exact du serveur Plex ami utilisé pour les doublons.</span>
+            </div>
+            <div class="form-group">
+                <label for="FRIEND_SERVER_NAME">Serveur ami</label>
+                <input
+                    type="text"
+                    class="form-control"
+                    id="FRIEND_SERVER_NAME"
+                    name="friend_server_name"
+                    list="friend-server-suggestions"
+                    value="{{ config.FRIEND_SERVER_NAME }}"
+                    placeholder="Nom exact du serveur Plex à comparer"
+                >
+                <datalist id="friend-server-suggestions">
+                    {% for server in friend_server_names %}
+                        <option value="{{ server }}">
+                    {% endfor %}
+                </datalist>
+                {% if not friend_server_names %}
+                    <div class="field-hint">
+                        Aucun serveur ami chargé pour le moment. Saisis le nom manuellement ou corrige l’authentification.
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="form-action-bar settings-actions">
+            <button type="submit" class="btn btn-primary">Enregistrer les paramètres</button>
+        </div>
     </form>
 
     <script>
@@ -73,11 +102,11 @@
 
         function updateAuthenticationValidation() {
             if (hasValidAuthenticationConfig()) {
-                authValidationResult.style.display = 'none';
+                authValidationResult.classList.remove('is-visible');
                 return true;
             }
 
-            authValidationResult.style.display = 'block';
+            authValidationResult.classList.add('is-visible');
             return false;
         }
 
@@ -106,7 +135,7 @@
             .then(data => {
                 const resultDiv = document.getElementById('token-test-result');
                 resultDiv.textContent = data.message;
-                resultDiv.className = data.status === 'success' ? 'alert alert-success' : 'alert alert-danger';
+                resultDiv.className = data.status === 'success' ? 'test-result is-visible is-success' : 'test-result is-visible is-error';
             });
         });
 
@@ -125,7 +154,7 @@
             .then(data => {
                 const resultDiv = document.getElementById('login-test-result');
                 resultDiv.textContent = data.message;
-                resultDiv.className = data.status === 'success' ? 'alert alert-success' : 'alert alert-danger';
+                resultDiv.className = data.status === 'success' ? 'test-result is-visible is-success' : 'test-result is-visible is-error';
             });
         });
     </script>

@@ -134,11 +134,6 @@
             <section class="content-panel content-panel--{{ endpoint }}">
                 {% block content %}{% endblock %}
             </section>
-            {% if request.endpoint != 'index' %}
-            <div class="button-container">
-                <a href="{{ url_for('index') }}" class="btn btn-secondary">Retour</a>
-            </div>
-            {% endif %}
         </main>
     </div>
     <!-- Inclure jQuery -->

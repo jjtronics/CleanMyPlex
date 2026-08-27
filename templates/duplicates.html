@@ -2,96 +2,119 @@
 
 {% block title %}Doublons{% endblock %}
 
-{% block header_title %}Gestion des Doublons{% endblock %}
+{% block header_title %}Doublons{% endblock %}
+
+{% block header_subtitle %}Comparer ton serveur Plex avec le serveur ami configuré, puis préparer les suppressions locales.{% endblock %}
 
 {% block content %}
-    <form method="post">
-        <div class="row">
-            <!-- Comparaison des Films -->
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label for="local_library_movies">Sélectionnez les bibliothèques de vos films à comparer :</label>
-                    <select multiple class="form-control" id="local_library_movies" name="local_library_movies">
-                        {% for lib in local_movie_libraries %}
-                            <option value="{{ lib }}">{{ lib }}</option>
-                        {% endfor %}
-                    </select>
-                    <small class="form-text text-muted">Maintenez Ctrl (Windows) ou Cmd (Mac) pour sélectionner plusieurs options.</small>
+    <form method="post" class="workflow-form">
+        <div class="comparison-grid">
+            <div class="comparison-card">
+                <div class="workflow-card__header">
+                    <span class="workflow-card__icon">◇</span>
+                    <div>
+                        <h2>Films</h2>
+                        <p>Comparer les films locaux avec ceux du serveur ami.</p>
+                    </div>
+                </div>
+                <div class="paired-fields">
+                    <div>
+                        <label for="local_library_movies">Bibliothèques locales</label>
+                        <select multiple class="form-control library-picker" id="local_library_movies" name="local_library_movies">
+                            {% for lib in local_movie_libraries %}
+                                <option value="{{ lib }}">{{ lib }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label for="friend_library_movies">Bibliothèques ami</label>
+                        <select multiple class="form-control library-picker" id="friend_library_movies" name="friend_library_movies">
+                            {% for lib in friend_movie_libraries %}
+                                <option value="{{ lib }}">{{ lib }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                 </div>
             </div>
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label for="friend_library_movies">Sélectionnez les bibliothèques de films de l'ami à comparer :</label>
-                    <select multiple class="form-control" id="friend_library_movies" name="friend_library_movies">
-                        {% for lib in friend_movie_libraries %}
-                            <option value="{{ lib }}">{{ lib }}</option>
-                        {% endfor %}
-                    </select>
-                    <small class="form-text text-muted">Maintenez Ctrl (Windows) ou Cmd (Mac) pour sélectionner plusieurs options.</small>
+
+            <div class="comparison-card">
+                <div class="workflow-card__header">
+                    <span class="workflow-card__icon">▤</span>
+                    <div>
+                        <h2>Séries</h2>
+                        <p>Comparer les séries locales avec celles du serveur ami.</p>
+                    </div>
+                </div>
+                <div class="paired-fields">
+                    <div>
+                        <label for="local_library_series">Bibliothèques locales</label>
+                        <select multiple class="form-control library-picker" id="local_library_series" name="local_library_series">
+                            {% for lib in local_show_libraries %}
+                                <option value="{{ lib }}">{{ lib }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label for="friend_library_series">Bibliothèques ami</label>
+                        <select multiple class="form-control library-picker" id="friend_library_series" name="friend_library_series">
+                            {% for lib in friend_show_libraries %}
+                                <option value="{{ lib }}">{{ lib }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="row">
-            <!-- Comparaison des Séries -->
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label for="local_library_series">Sélectionnez les bibliothèques de vos séries à comparer :</label>
-                    <select multiple class="form-control" id="local_library_series" name="local_library_series">
-                        {% for lib in local_show_libraries %}
-                            <option value="{{ lib }}">{{ lib }}</option>
-                        {% endfor %}
-                    </select>
-                    <small class="form-text text-muted">Maintenez Ctrl (Windows) ou Cmd (Mac) pour sélectionner plusieurs options.</small>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label for="friend_library_series">Sélectionnez les bibliothèques de séries de l'ami à comparer :</label>
-                    <select multiple class="form-control" id="friend_library_series" name="friend_library_series">
-                        {% for lib in friend_show_libraries %}
-                            <option value="{{ lib }}">{{ lib }}</option>
-                        {% endfor %}
-                    </select>
-                    <small class="form-text text-muted">Maintenez Ctrl (Windows) ou Cmd (Mac) pour sélectionner plusieurs options.</small>
-                </div>
-            </div>
+        <div class="form-action-bar">
+            <button type="submit" class="btn btn-primary">Lancer la comparaison</button>
         </div>
-
-        <button type="submit" class="btn btn-primary">Comparer les Bibliothèques</button>
     </form>
 
-    <h2 class="my-4">CSV des Doublons existants</h2>
-    <div class="list-group">
-        {% if common_movies_csv_exists %}
-            <div class="list-group-item d-flex justify-content-between align-items-center mb-2">
-                <div class="d-flex align-items-center">
-                    <a href="{{ url_for('view_existing_csv', library='common_movies') }}" class="text-dark">Voir CSV des doublons de films</a>
-                    <small class="text-muted ml-2">(Dernière modification : {{ common_movies_csv_mtime }})</small>
-                </div>
-                <form action="{{ url_for('delete_csv') }}" method="post" class="mb-0">
-                    <input type="hidden" name="csv_file" value="common_movies.csv">
-                    <button type="submit" class="btn btn-danger btn-sm">🗑️</button>
-                </form>
-            </div>
-        {% endif %}
-        {% if common_series_csv_exists %}
-            <div class="list-group-item d-flex justify-content-between align-items-center mb-2">
-                <div class="d-flex align-items-center">
-                    <a href="{{ url_for('view_existing_csv', library='common_series') }}" class="text-dark">Voir CSV des doublons de séries</a>
-                    <small class="text-muted ml-2">(Dernière modification : {{ common_series_csv_mtime }})</small>
-                </div>
-                <form action="{{ url_for('delete_csv') }}" method="post" class="mb-0">
-                    <input type="hidden" name="csv_file" value="common_series.csv">
-                    <button type="submit" class="btn btn-danger btn-sm">🗑️</button>
-                </form>
-            </div>
-        {% endif %}
+    <div class="section-header">
+        <h2>CSV de doublons</h2>
+        <span>Les suppressions restent locales, jamais sur le serveur ami.</span>
     </div>
-{% endblock %}
 
-{% block scripts %}
-<script>
-    // Aucun script spécifique nécessaire ici
-</script>
+    <div class="dataset-list">
+        <div class="dataset-row">
+            <div>
+                <span class="dataset-card__label">common_movies.csv</span>
+                <strong>Films communs</strong>
+                <small>{% if common_movies_csv_exists %}Dernière modification : {{ common_movies_csv_mtime }}{% else %}Aucun CSV généré{% endif %}</small>
+            </div>
+            <div class="dataset-row__actions">
+                <span class="status-pill {% if common_movies_csv_exists %}status-pill--ok{% else %}status-pill--muted{% endif %}">
+                    {% if common_movies_csv_exists %}Disponible{% else %}Absent{% endif %}
+                </span>
+                {% if common_movies_csv_exists %}
+                    <a href="{{ url_for('view_existing_csv', library='common_movies') }}" class="btn btn-secondary btn-sm">Ouvrir</a>
+                    <form action="{{ url_for('delete_csv') }}" method="post" class="inline-form">
+                        <input type="hidden" name="csv_file" value="common_movies.csv">
+                        <button type="submit" class="btn btn-danger btn-sm">Supprimer</button>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="dataset-row">
+            <div>
+                <span class="dataset-card__label">common_series.csv</span>
+                <strong>Séries communes</strong>
+                <small>{% if common_series_csv_exists %}Dernière modification : {{ common_series_csv_mtime }}{% else %}Aucun CSV généré{% endif %}</small>
+            </div>
+            <div class="dataset-row__actions">
+                <span class="status-pill {% if common_series_csv_exists %}status-pill--ok{% else %}status-pill--muted{% endif %}">
+                    {% if common_series_csv_exists %}Disponible{% else %}Absent{% endif %}
+                </span>
+                {% if common_series_csv_exists %}
+                    <a href="{{ url_for('view_existing_csv', library='common_series') }}" class="btn btn-secondary btn-sm">Ouvrir</a>
+                    <form action="{{ url_for('delete_csv') }}" method="post" class="inline-form">
+                        <input type="hidden" name="csv_file" value="common_series.csv">
+                        <button type="submit" class="btn btn-danger btn-sm">Supprimer</button>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
 {% endblock %}

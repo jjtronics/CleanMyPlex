@@ -2,12 +2,89 @@
 
 {% block title %}CleanMyPlex{% endblock %}
 
+{% block header_title %}Centre de contrôle{% endblock %}
+
+{% block header_subtitle %}Lancer les scans, reprendre les CSV existants et suivre les tâches Plex en cours.{% endblock %}
+
 {% block content %}
-    <h2>Choisissez une action:</h2>
-    <div class="list-group">
-        <a href="{{ url_for('clean') }}" class="list-group-item list-group-item-action">Nettoyage de vos films/séries</a>
-        <a href="{{ url_for('duplicates') }}" class="list-group-item list-group-item-action">Vérifier les doublons entre serveurs Plex</a>
-        <a href="{{ url_for('manage_users') }}" class="list-group-item list-group-item-action">Gestion des utilisateurs</a>
+    <div class="dashboard-grid">
+        <a href="{{ url_for('clean') }}" class="work-card work-card--primary">
+            <span class="work-card__icon">▦</span>
+            <span class="work-card__body">
+                <span class="work-card__eyebrow">Nettoyage</span>
+                <strong>Films et séries non vus</strong>
+                <span>Scanner les bibliothèques, marquer archive/suppression, puis traiter proprement.</span>
+            </span>
+            <span class="work-card__arrow">›</span>
+        </a>
+
+        <a href="{{ url_for('duplicates') }}" class="work-card">
+            <span class="work-card__icon">◇</span>
+            <span class="work-card__body">
+                <span class="work-card__eyebrow">Doublons</span>
+                <strong>Comparaison entre serveurs</strong>
+                <span>Repérer les médias communs et préparer la suppression locale contrôlée.</span>
+            </span>
+            <span class="work-card__arrow">›</span>
+        </a>
+
+        <a href="{{ url_for('manage_users') }}" class="work-card">
+            <span class="work-card__icon">◉</span>
+            <span class="work-card__body">
+                <span class="work-card__eyebrow">Utilisateurs</span>
+                <strong>Activité et accès Plex</strong>
+                <span>Voir les comptes partagés, sessions actives et détails utilisateur.</span>
+            </span>
+            <span class="work-card__arrow">›</span>
+        </a>
+    </div>
+
+    <div class="section-header">
+        <h2>CSV disponibles</h2>
+        <span>Reprendre un travail existant sans relancer un scan.</span>
+    </div>
+
+    <div class="dataset-grid">
+        <div class="dataset-card">
+            <span class="dataset-card__label">Nettoyage films</span>
+            <strong>Films non vus</strong>
+            <span class="status-pill {% if films_csv_exists %}status-pill--ok{% else %}status-pill--muted{% endif %}">
+                {% if films_csv_exists %}Disponible{% else %}Absent{% endif %}
+            </span>
+            {% if films_csv_exists %}
+                <a href="{{ url_for('view_existing_csv', library='films') }}" class="btn btn-secondary btn-sm">Ouvrir</a>
+            {% endif %}
+        </div>
+        <div class="dataset-card">
+            <span class="dataset-card__label">Nettoyage séries</span>
+            <strong>Séries non vues</strong>
+            <span class="status-pill {% if series_csv_exists %}status-pill--ok{% else %}status-pill--muted{% endif %}">
+                {% if series_csv_exists %}Disponible{% else %}Absent{% endif %}
+            </span>
+            {% if series_csv_exists %}
+                <a href="{{ url_for('view_existing_csv', library='series') }}" class="btn btn-secondary btn-sm">Ouvrir</a>
+            {% endif %}
+        </div>
+        <div class="dataset-card">
+            <span class="dataset-card__label">Doublons films</span>
+            <strong>Films communs</strong>
+            <span class="status-pill {% if common_movies_csv_exists %}status-pill--ok{% else %}status-pill--muted{% endif %}">
+                {% if common_movies_csv_exists %}Disponible{% else %}Absent{% endif %}
+            </span>
+            {% if common_movies_csv_exists %}
+                <a href="{{ url_for('view_existing_csv', library='common_movies') }}" class="btn btn-secondary btn-sm">Ouvrir</a>
+            {% endif %}
+        </div>
+        <div class="dataset-card">
+            <span class="dataset-card__label">Doublons séries</span>
+            <strong>Séries communes</strong>
+            <span class="status-pill {% if common_series_csv_exists %}status-pill--ok{% else %}status-pill--muted{% endif %}">
+                {% if common_series_csv_exists %}Disponible{% else %}Absent{% endif %}
+            </span>
+            {% if common_series_csv_exists %}
+                <a href="{{ url_for('view_existing_csv', library='common_series') }}" class="btn btn-secondary btn-sm">Ouvrir</a>
+            {% endif %}
+        </div>
     </div>
 {% endblock %}
 

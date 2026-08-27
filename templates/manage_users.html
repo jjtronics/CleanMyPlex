@@ -2,37 +2,52 @@
 
 {% block title %}Gestion des utilisateurs{% endblock %}
 
+{% block header_title %}Utilisateurs{% endblock %}
+
+{% block header_subtitle %}Consulter les accès Plex, l’activité courante et les informations de compte.{% endblock %}
+
 {% block content %}
-<h2>Liste des utilisateurs Plex</h2>
-<div class="table-responsive">
+<div class="section-header">
+    <h2>Comptes partagés</h2>
+    <span>{{ users|length }} utilisateur(s) Plex</span>
+</div>
+
+<div class="operator-table">
     <table class="table table-bordered">
         <thead>
-            <tr>
-                <th>Nom d'utilisateur</th>
-                <th>Adresse email</th>
-                <th>Titre complet</th>
-                <th>ID utilisateur</th>
-                <th>Membre de Plex Home</th>
-                <th>Rôle</th>
-                <th>Actif</th> <!-- Affichage si l'utilisateur est actuellement actif -->
-                <th>Adresse IP publique</th>
-                <th>Actions</th>
-            </tr>
+        <tr>
+            <th>Utilisateur</th>
+            <th>Email</th>
+            <th>Plex Home</th>
+            <th>Rôle</th>
+            <th>Activité</th>
+            <th>IP publique</th>
+            <th></th>
+        </tr>
         </thead>
         <tbody>
-            {% for user in users %}
-            <tr>
-                <td><a href="{{ url_for('user_details', username=user.username) }}">{{ user.username }}</a></td>
-                <td>{{ user.email }}</td>
-                <td>{{ user.title }}</td>
-                <td>{{ user.userID }}</td>
-                <td>{{ user.homeUser }}</td>
-                <td>{{ user.role }}</td>
-                <td>{{ user.is_active }}</td> <!-- Oui ou Non pour l'activité -->
-                <td>{{ user.publicAddress }}</td> <!-- Adresse IP publique si disponible -->
-                <td><a href="{{ url_for('user_details', username=user.username) }}" class="btn btn-info btn-sm">Détails</a></td>
-            </tr>
-            {% endfor %}
+        {% for user in users %}
+        <tr>
+            <td>
+                <a href="{{ url_for('user_details', username=user.username) }}" class="strong-link">{{ user.username }}</a>
+                <small>{{ user.title }}</small>
+            </td>
+            <td>{{ user.email }}</td>
+            <td>
+                <span class="status-pill {% if user.homeUser == 'Oui' %}status-pill--ok{% else %}status-pill--muted{% endif %}">
+                    {{ user.homeUser }}
+                </span>
+            </td>
+            <td>{{ user.role }}</td>
+            <td>
+                <span class="status-pill {% if user.is_active == 'Oui' %}status-pill--ok{% else %}status-pill--muted{% endif %}">
+                    {{ user.is_active }}
+                </span>
+            </td>
+            <td>{{ user.publicAddress }}</td>
+            <td><a href="{{ url_for('user_details', username=user.username) }}" class="btn btn-info btn-sm">Détails</a></td>
+        </tr>
+        {% endfor %}
         </tbody>
     </table>
 </div>
