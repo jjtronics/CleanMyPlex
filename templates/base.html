@@ -38,7 +38,10 @@
         </a>
 
         <div class="health-strip" aria-label="Etat de la connexion Plex">
-            {% if connection_status.has_issues %}
+            {% if connection_status.refreshing %}
+                <span class="health-strip__item health-strip__item--warn">Plex...</span>
+                <span class="health-strip__item health-strip__item--warn">Config...</span>
+            {% elif connection_status.has_issues %}
                 <span class="health-strip__item health-strip__item--crit">Plex</span>
                 <span class="health-strip__item health-strip__item--warn">Config</span>
             {% else %}
@@ -123,6 +126,10 @@
                     {% if connection_status.account_error %}
                         <div><strong>Compte Plex :</strong> {{ connection_status.account_error }}</div>
                     {% endif %}
+                </div>
+            {% elif connection_status.refreshing %}
+                <div class="alert alert-info">
+                    <strong>Connexion Plex en cours.</strong> L'interface est disponible, les fonctions Plex seront actives dans quelques secondes.
                 </div>
             {% endif %}
             <!-- Conteneur pour les notifications dynamiques -->

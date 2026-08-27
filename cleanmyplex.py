@@ -55,8 +55,10 @@ account = None
 connection_status = {
     'plex_error': None,
     'account_error': None,
-    'account_configured': False
+    'account_configured': bool(PLEX_TOKEN or (PLEX_USERNAME and PLEX_PASSWORD)),
+    'refreshing': False,
 }
+connection_lock = threading.Lock()
 
 # Variables globales pour suivre les tâches en arrière-plan
 tasks = {}
@@ -525,7 +527,7 @@ def connect_to_plex(plex_url, plex_token):
         return None, 'URL ou token Plex manquant.'
 
     try:
-        plex_server = PlexServer(plex_url, plex_token, timeout=300)
+        plex_server = PlexServer(plex_url, plex_token, timeout=10)
         plex_server.library.sections()
         return plex_server, None
     except Exception as e:
@@ -561,19 +563,38 @@ def connect_to_account(username='', password='', token=''):
 def refresh_connections():
     global plex, account
 
-    plex, connection_status['plex_error'] = connect_to_plex(PLEX_URL, PLEX_TOKEN)
-    account, connection_status['account_error'] = connect_to_account(PLEX_USERNAME, PLEX_PASSWORD, PLEX_TOKEN)
-    connection_status['account_configured'] = bool(PLEX_TOKEN or (PLEX_USERNAME and PLEX_PASSWORD))
+    with connection_lock:
+        connection_status['refreshing'] = True
+
+    next_plex, plex_error = connect_to_plex(PLEX_URL, PLEX_TOKEN)
+    next_account, account_error = connect_to_account(PLEX_USERNAME, PLEX_PASSWORD, PLEX_TOKEN)
+
+    with connection_lock:
+        plex = next_plex
+        account = next_account
+        connection_status['plex_error'] = plex_error
+        connection_status['account_error'] = account_error
+        connection_status['account_configured'] = bool(PLEX_TOKEN or (PLEX_USERNAME and PLEX_PASSWORD))
+        connection_status['refreshing'] = False
+
+
+def refresh_connections_async():
+    threading.Thread(target=refresh_connections, daemon=True).start()
 
 
 def ensure_required_connections(require_plex=False, require_account=False):
     errors = []
 
     if require_plex and plex is None:
-        errors.append(f"Connexion au serveur Plex indisponible : {connection_status['plex_error']}")
+        if connection_status['refreshing']:
+            errors.append("Connexion au serveur Plex en cours d'initialisation.")
+        else:
+            errors.append(f"Connexion au serveur Plex indisponible : {connection_status['plex_error']}")
 
     if require_account and account is None:
-        if connection_status['account_configured']:
+        if connection_status['refreshing']:
+            errors.append("Connexion au compte Plex en cours d'initialisation.")
+        elif connection_status['account_configured']:
             errors.append(f"Connexion au compte Plex indisponible : {connection_status['account_error']}")
         else:
             errors.append("Cette fonctionnalité nécessite un token Plex ou les identifiants Plex.")
@@ -604,12 +625,13 @@ def inject_connection_status():
             'plex_error': connection_status['plex_error'],
             'account_error': connection_status['account_error'],
             'account_configured': connection_status['account_configured'],
+            'refreshing': connection_status['refreshing'],
             'has_issues': bool(connection_status['plex_error'] or connection_status['account_error'])
         }
     }
 
 
-refresh_connections()
+refresh_connections_async()
 
 def get_active_sessions():
     try:
