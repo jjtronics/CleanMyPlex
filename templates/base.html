@@ -39,14 +39,14 @@
 
         <div class="health-strip" aria-label="Etat de la connexion Plex">
             {% if connection_status.refreshing %}
-                <span class="health-strip__item health-strip__item--warn">Plex...</span>
-                <span class="health-strip__item health-strip__item--warn">Config...</span>
+                <span class="health-strip__dot health-strip__dot--warn"></span>
+                <span class="health-strip__text">Connexion Plex...</span>
             {% elif connection_status.has_issues %}
-                <span class="health-strip__item health-strip__item--crit">Plex</span>
-                <span class="health-strip__item health-strip__item--warn">Config</span>
+                <span class="health-strip__dot health-strip__dot--crit"></span>
+                <span class="health-strip__text">Mode dégradé</span>
             {% else %}
-                <span class="health-strip__item health-strip__item--ok">Plex</span>
-                <span class="health-strip__item health-strip__item--ok">Config</span>
+                <span class="health-strip__dot health-strip__dot--ok"></span>
+                <span class="health-strip__text">Plex connecté</span>
             {% endif %}
         </div>
 
