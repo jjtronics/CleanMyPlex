@@ -8,7 +8,7 @@
         <div class="csv-page__header">
             <div>
                 <h2>CSV - {{ csv_file }}</h2>
-                <p>{{ df|length }} éléments chargés</p>
+                <p>{{ row_count }} éléments indexés</p>
             </div>
         </div>
 
@@ -79,51 +79,7 @@
                         {% endfor %}
                     </tr>
                 </thead>
-                <tbody>
-                    {% for index, row in df.iterrows() %}
-                        <tr>
-                            <td><input type="checkbox" class="row-select" name="selected_rows" value="{{ index }}"></td>
-                            <!-- Utiliser un placeholder pour l'image et stocker l'URL réelle dans data-actualsrc -->
-                            <td>
-                                {% if row['poster_url'] != 'N/A' %}
-                                    <img src="{{ url_for('static', filename='placeholder.jpg') }}"
-                                         data-actualsrc="{{ row['poster_url'] }}"
-                                         alt="Affiche" width="50" class="lazy-image">
-                                {% else %}
-                                    <img src="{{ url_for('static', filename='no_image_available.jpg') }}"
-                                         alt="Pas d'image" width="50">
-                                {% endif %}
-                            </td>
-                            {% for title in titles %}
-                                {% if title != 'poster_url' and title not in ['summary', 'genres', 'directors', 'actors'] %}
-                                    <td data-title="{{ title }}"
-                                        {% if title in ['file_size', 'local_file_size', 'remote_file_size', 'largest_file_size'] and row[title] != '' and row[title] != 'N/A' %}
-                                            data-order="{{ row[title]|replace(' Go', '') }}"
-                                        {% endif %}>
-                                        {% if title == "title" %}
-                                            <a href="#" class="item-title"
-                                               data-poster-url="{{ row['poster_url'] }}"
-                                               data-summary="{{ row['summary'] }}"
-                                               data-release-date="{{ row['release_date'] }}"
-                                               data-rating="{{ row['rating'] }}"
-                                               data-plex-rating="{{ row['plex_rating'] }}"
-                                               data-view-count="{{ row['view_count'] }}"
-                                               data-genres="{{ row['genres'] }}"
-                                               data-directors="{{ row['directors'] }}"
-                                               data-actors="{{ row['actors'] }}">
-                                                {{ row[title] }}
-                                            </a>
-                                        {% elif row[title] == '' or row[title] == 'N/A' %}
-                                            N/A
-                                        {% else %}
-                                            {{ row[title] }}
-                                        {% endif %}
-                                    </td>
-                                {% endif %}
-                            {% endfor %}
-                        </tr>
-                    {% endfor %}
-                </tbody>
+                <tbody></tbody>
                 <!-- Pied de page du tableau pour les totaux et moyennes -->
                 <tfoot>
                     <tr>
@@ -210,12 +166,25 @@
 {% block scripts %}
 <script>
     $(document).ready(function() {
+        var csvColumnNames = [
+            'select',
+            'miniature',
+            {% for title in titles %}
+                {% if title != 'poster_url' and title not in ['summary', 'genres', 'directors', 'actors'] %}
+                    {{ title | tojson }},
+                {% endif %}
+            {% endfor %}
+        ];
+
         // Initialisation de DataTable avec footerCallback
         var table = $('#csvTable').DataTable({
             "paging": true,
             "searching": true,
             "ordering": true,
             "orderCellsTop": true,
+            "processing": true,
+            "serverSide": true,
+            "deferRender": true,
             "scrollX": true,
             "scrollY": "62vh",
             "scrollCollapse": true,
@@ -237,6 +206,18 @@
                 },
             },
             "dom": '<"csv-table-controls"<"csv-table-controls__left"l><"csv-table-controls__right"f>>rt<"csv-table-footer"ip>',
+            "ajax": {
+                "url": "{{ url_for('csv_rows_api', csv_file=csv_file) }}",
+                "data": function(data) {
+                    $('.csv-table-card .column-filter').each(function() {
+                        var column = getFilterColumn(this);
+                        var value = ($(this).val() || '').trim();
+                        if (column && value) {
+                            data['column_filter_' + column] = value;
+                        }
+                    });
+                }
+            },
             "columns": [
                 { "name": "select", "orderable": false },  // Colonne de sélection
                 { "name": "miniature", "orderable": false },  // Nouvelle colonne pour la miniature
@@ -246,6 +227,14 @@
                     {% endif %}
                 {% endfor %}
             ],
+            "createdRow": function(row) {
+                $('td', row).each(function(index) {
+                    var columnName = csvColumnNames[index];
+                    if (columnName && columnName !== 'select' && columnName !== 'miniature') {
+                        $(this).attr('data-title', columnName);
+                    }
+                });
+            },
             "initComplete": function() {
                 $('.dataTables_scrollBody').attr('tabindex', '0');
                 installCsvHorizontalScroll();
@@ -259,8 +248,22 @@
             "footerCallback": function ( row, data, start, end, display ) {
                 var api = this.api();
 
+                function hasColumn(columnName) {
+                    return api.column(columnName + ':name').index() !== undefined;
+                }
+
+                function setFooter(columnName, value) {
+                    if (!hasColumn(columnName)) {
+                        return;
+                    }
+                    $(api.column(columnName + ':name').footer()).html(value);
+                }
+
                 // Fonction utilitaire pour formater les nombres
                 var intVal = function ( i ) {
+                    if (typeof i === 'string') {
+                        i = $('<div>').html(i).text();
+                    }
                     var val = typeof i === 'string' ?
                         i.replace(/[\€,N\/A Go]/g, '') :  // Supprimer €, N/A, et Go
                         typeof i === 'number' ?
@@ -269,34 +272,43 @@
                 };
 
                 // Calculer la moyenne de la colonne 'rating'
-                var ratingData = api.column('rating:name', {filter:'applied'}).data().map(intVal).filter(function(i) { return i !== 0; });
-                if (ratingData.length) {
-                    var ratingSum = ratingData.reduce( function (a, b) { return a + b; }, 0 );
-                    var ratingAvg = ratingSum / ratingData.length;
-                    $( api.column('rating:name').footer() ).html('Moyenne : ' + ratingAvg.toFixed(2));
-                } else {
-                    $( api.column('rating:name').footer() ).html('Moyenne : N/A');
+                if (hasColumn('rating')) {
+                    var ratingData = api.column('rating:name', {filter:'applied'}).data().map(intVal).filter(function(i) { return i !== 0; });
+                    if (ratingData.length) {
+                        var ratingSum = ratingData.reduce( function (a, b) { return a + b; }, 0 );
+                        var ratingAvg = ratingSum / ratingData.length;
+                        setFooter('rating', 'Moyenne : ' + ratingAvg.toFixed(2));
+                    } else {
+                        setFooter('rating', 'Moyenne : N/A');
+                    }
                 }
 
                 // Calculer la moyenne de la colonne 'plex_rating'
-                var plexRatingData = api.column('plex_rating:name', {filter:'applied'}).data().map(intVal).filter(function(i) { return i !== 0; });
-                if (plexRatingData.length) {
-                    var plexRatingSum = plexRatingData.reduce( function (a, b) { return a + b; }, 0 );
-                    var plexRatingAvg = plexRatingSum / plexRatingData.length;
-                    $( api.column('plex_rating:name').footer() ).html('Moyenne : ' + plexRatingAvg.toFixed(2));
-                } else {
-                    $( api.column('plex_rating:name').footer() ).html('Moyenne : N/A');
+                if (hasColumn('plex_rating')) {
+                    var plexRatingData = api.column('plex_rating:name', {filter:'applied'}).data().map(intVal).filter(function(i) { return i !== 0; });
+                    if (plexRatingData.length) {
+                        var plexRatingSum = plexRatingData.reduce( function (a, b) { return a + b; }, 0 );
+                        var plexRatingAvg = plexRatingSum / plexRatingData.length;
+                        setFooter('plex_rating', 'Moyenne : ' + plexRatingAvg.toFixed(2));
+                    } else {
+                        setFooter('plex_rating', 'Moyenne : N/A');
+                    }
                 }
 
                 // Calculer le total de la colonne 'view_count'
-                var viewCountTotal = api.column('view_count:name', {filter:'applied'}).data()
-                    .map(intVal)
-                    .reduce( function (a, b) { return a + b; }, 0 );
+                if (hasColumn('view_count')) {
+                    var viewCountTotal = api.column('view_count:name', {filter:'applied'}).data()
+                        .map(intVal)
+                        .reduce( function (a, b) { return a + b; }, 0 );
 
-                $( api.column('view_count:name').footer() ).html('Total : ' + viewCountTotal);
+                    setFooter('view_count', 'Total : ' + viewCountTotal);
+                }
 
                 // Fonction pour calculer le total des colonnes de taille de fichier
                 function calculateFileSizeTotal(columnName) {
+                    if (!hasColumn(columnName)) {
+                        return;
+                    }
                     var total = 0;
                     api.rows({filter: 'applied'}).every(function(rowIdx, tableLoop, rowLoop) {
                         var data = this.node();
@@ -306,7 +318,7 @@
                             total += num;
                         }
                     });
-                    $(api.column(columnName + ':name').footer()).html('Total : ' + total.toFixed(2) + ' Go');
+                    setFooter(columnName, 'Total : ' + total.toFixed(2) + ' Go');
                 }
 
                 // Calculer les totaux pour les colonnes de taille de fichier
@@ -319,7 +331,7 @@
 
         window.setTimeout(function() {
             hideCsvLoader();
-        }, 1200);
+        }, 15000);
 
         function hideCsvLoader() {
             $('#csv-loading-overlay').addClass('is-hidden');
@@ -385,8 +397,6 @@
             topScrollInner.width(scrollWidth);
         }
 
-        var activeColumnFilters = {};
-
         function getFilterColumn(input) {
             var column = $(input).closest('th').data('column');
             if (column) {
@@ -401,122 +411,10 @@
             return '';
         }
 
-        function refreshActiveColumnFilters() {
-            activeColumnFilters = {};
-
-            $('.csv-table-card .column-filter').each(function() {
-                var column = getFilterColumn(this);
-                var value = ($(this).val() || '').trim();
-                if (!column || !value) {
-                    return;
-                }
-
-                activeColumnFilters[column] = {
-                    isDate: $(this).hasClass('date-filter'),
-                    isSelect: $(this).is('select'),
-                    value: value
-                };
-            });
-        }
-
         // Gestionnaire d'événements pour les filtres
         $('.csv-table-card').on('input keyup change', '.column-filter', function() {
-            refreshActiveColumnFilters();
             table.draw();
         });
-
-        // Filtre personnalisé pour gérer les opérateurs mathématiques
-        $.fn.dataTable.ext.search.push(
-            function(settings, data, dataIndex) {
-                if (settings.nTable !== table.table().node()) {
-                    return true;
-                }
-
-                var row = table.row(dataIndex).node();
-
-                for (var columnName in activeColumnFilters) {
-                    if (!Object.prototype.hasOwnProperty.call(activeColumnFilters, columnName)) {
-                        continue;
-                    }
-
-                    var filter = activeColumnFilters[columnName];
-                    var filterValue = filter.value;
-                    var dataValue = $(row).find('td[data-title="' + columnName + '"]').text().trim();
-
-                    if (filter.isSelect) {
-                        if (filterValue !== dataValue) {
-                            return false;
-                        }
-                        continue;
-                    }
-
-                    var operatorMatch = filterValue.match(/^(<=|>=|=|<|>)(.*)$/);
-                    if (operatorMatch) {
-                        var operator = operatorMatch[1];
-                        var filterContent = operatorMatch[2].trim();
-
-                        if (filter.isDate) {
-                            var filterDate = new Date(filterContent);
-                            var dataDate = new Date(dataValue);
-
-                            if (isNaN(filterDate.getTime()) || isNaN(dataDate.getTime())) {
-                                return false;
-                            }
-
-                            switch (operator) {
-                                case '>':
-                                    if (!(dataDate > filterDate)) return false;
-                                    break;
-                                case '<':
-                                    if (!(dataDate < filterDate)) return false;
-                                    break;
-                                case '>=':
-                                    if (!(dataDate >= filterDate)) return false;
-                                    break;
-                                case '<=':
-                                    if (!(dataDate <= filterDate)) return false;
-                                    break;
-                                case '=':
-                                case '==':
-                                    if (dataDate.getTime() !== filterDate.getTime()) return false;
-                                    break;
-                                default:
-                                    return false;
-                            }
-                        } else {
-                            var filterNumber = parseFloat(filterContent);
-                            var dataNumber = parseFloat(dataValue.replace(/[^0-9\.-]+/g, ''));
-                            if (isNaN(dataNumber)) dataNumber = 0;
-
-                            switch (operator) {
-                                case '>':
-                                    if (!(dataNumber > filterNumber)) return false;
-                                    break;
-                                case '<':
-                                    if (!(dataNumber < filterNumber)) return false;
-                                    break;
-                                case '>=':
-                                    if (!(dataNumber >= filterNumber)) return false;
-                                    break;
-                                case '<=':
-                                    if (!(dataNumber <= filterNumber)) return false;
-                                    break;
-                                case '=':
-                                case '==':
-                                    if (!(dataNumber == filterNumber)) return false;
-                                    break;
-                                default:
-                                    return false;
-                            }
-                        }
-                    } else if (dataValue.toLowerCase().indexOf(filterValue.toLowerCase()) === -1) {
-                        return false;
-                    }
-                }
-
-                return true;
-            }
-        );
 
         // Gestionnaire d'événements pour les titres
         $('#csvTable tbody').on('click', '.item-title', function(e) {

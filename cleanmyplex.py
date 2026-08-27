@@ -5,8 +5,11 @@ from plexapi.server import PlexServer
 from plexapi.myplex import MyPlexAccount
 import json
 import os
+import re
+import sqlite3
 import threading
 import time
+from html import escape
 from uuid import uuid4
 
 app = Flask(__name__)
@@ -43,6 +46,9 @@ CSV_FILE_FILMS = 'unwatched_movies.csv'
 CSV_FILE_SERIES = 'unwatched_series.csv'
 CSV_FILE_COMMON_MOVIES = 'common_movies.csv'
 CSV_FILE_COMMON_SERIES = 'common_series.csv'
+SQLITE_DB_FILE = 'cleanmyplex.sqlite3'
+VALID_CSV_FILES = [CSV_FILE_FILMS, CSV_FILE_SERIES, CSV_FILE_COMMON_MOVIES, CSV_FILE_COMMON_SERIES]
+HIDDEN_CSV_COLUMNS = ['poster_url', 'summary', 'genres', 'directors', 'actors']
 
 plex = None
 account = None
@@ -59,6 +65,451 @@ tasks_lock = threading.Lock()
 # Assurez-vous que le répertoire de cache des affiches existe
 if not os.path.exists('static/poster_cache'):
     os.makedirs('static/poster_cache')
+
+
+def get_db_connection():
+    conn = sqlite3.connect(SQLITE_DB_FILE)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_sqlite_store():
+    with get_db_connection() as conn:
+        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA synchronous=NORMAL')
+        conn.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS csv_datasets (
+                csv_file TEXT PRIMARY KEY,
+                columns_json TEXT NOT NULL,
+                source_mtime REAL NOT NULL,
+                row_count INTEGER NOT NULL DEFAULT 0,
+                imported_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            '''
+        )
+        conn.execute(
+            '''
+            CREATE TABLE IF NOT EXISTS csv_rows (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                csv_file TEXT NOT NULL,
+                row_index INTEGER NOT NULL,
+                data_json TEXT NOT NULL,
+                title TEXT,
+                rating_key TEXT,
+                action TEXT,
+                library TEXT,
+                local_path TEXT,
+                added_at TEXT,
+                release_date TEXT,
+                rating REAL,
+                plex_rating REAL,
+                view_count REAL,
+                file_size REAL,
+                local_file_size REAL,
+                remote_file_size REAL,
+                largest_file_size REAL,
+                UNIQUE(csv_file, row_index)
+            )
+            '''
+        )
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_csv_rows_file ON csv_rows(csv_file)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_csv_rows_title ON csv_rows(csv_file, title)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_csv_rows_action ON csv_rows(csv_file, action)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_csv_rows_library ON csv_rows(csv_file, library)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_csv_rows_local_path ON csv_rows(csv_file, local_path)')
+        conn.execute('CREATE INDEX IF NOT EXISTS idx_csv_rows_added_at ON csv_rows(csv_file, added_at)')
+
+
+def parse_size_gb(value):
+    if value is None or pd.isna(value):
+        return None
+    match = re.search(r'-?\d+(?:[.,]\d+)?', str(value))
+    if not match:
+        return None
+    return float(match.group(0).replace(',', '.'))
+
+
+def parse_float_value(value):
+    if value is None or pd.isna(value):
+        return None
+    try:
+        return float(str(value).replace(',', '.').replace(' Go', '').strip())
+    except ValueError:
+        return None
+
+
+def normalize_csv_cell(value):
+    if value is None or pd.isna(value):
+        return 'N/A'
+    if hasattr(value, 'strftime'):
+        return value.strftime('%Y-%m-%d')
+    text = str(value)
+    return 'N/A' if text == 'nan' else text
+
+
+def load_csv_dataframe(csv_file):
+    df = pd.read_csv(csv_file)
+    df = df.fillna('N/A')
+    if 'ratingKey' not in df.columns:
+        df['ratingKey'] = 'N/A'
+    return df
+
+
+def import_csv_to_sqlite(csv_file, force=False):
+    if csv_file not in VALID_CSV_FILES or not os.path.exists(csv_file):
+        return None
+
+    source_mtime = os.path.getmtime(csv_file)
+    with get_db_connection() as conn:
+        dataset = conn.execute(
+            'SELECT source_mtime, columns_json, row_count FROM csv_datasets WHERE csv_file = ?',
+            (csv_file,)
+        ).fetchone()
+        if dataset and not force and float(dataset['source_mtime']) == float(source_mtime):
+            return {
+                'columns': json.loads(dataset['columns_json']),
+                'row_count': dataset['row_count'],
+                'source_mtime': dataset['source_mtime']
+            }
+
+    df = load_csv_dataframe(csv_file)
+    columns = [str(column) for column in df.columns]
+    rows = []
+    for row_index, row in df.iterrows():
+        data = {column: normalize_csv_cell(row.get(column, 'N/A')) for column in columns}
+        rows.append((
+            csv_file,
+            int(row_index),
+            json.dumps(data, ensure_ascii=False),
+            data.get('title'),
+            data.get('ratingKey'),
+            data.get('Action', ''),
+            data.get('Bibliothèque'),
+            data.get('local_path'),
+            data.get('added_at'),
+            data.get('release_date'),
+            parse_float_value(data.get('rating')),
+            parse_float_value(data.get('plex_rating')),
+            parse_float_value(data.get('view_count')),
+            parse_size_gb(data.get('file_size')),
+            parse_size_gb(data.get('local_file_size')),
+            parse_size_gb(data.get('remote_file_size')),
+            parse_size_gb(data.get('largest_file_size')),
+        ))
+
+    with get_db_connection() as conn:
+        conn.execute('DELETE FROM csv_rows WHERE csv_file = ?', (csv_file,))
+        conn.executemany(
+            '''
+            INSERT INTO csv_rows (
+                csv_file, row_index, data_json, title, rating_key, action, library, local_path,
+                added_at, release_date, rating, plex_rating, view_count, file_size,
+                local_file_size, remote_file_size, largest_file_size
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''',
+            rows
+        )
+        conn.execute(
+            '''
+            INSERT INTO csv_datasets (csv_file, columns_json, source_mtime, row_count, imported_at)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ON CONFLICT(csv_file) DO UPDATE SET
+                columns_json = excluded.columns_json,
+                source_mtime = excluded.source_mtime,
+                row_count = excluded.row_count,
+                imported_at = CURRENT_TIMESTAMP
+            ''',
+            (csv_file, json.dumps(columns, ensure_ascii=False), source_mtime, len(rows))
+        )
+
+    return {'columns': columns, 'row_count': len(rows), 'source_mtime': source_mtime}
+
+
+def get_sqlite_dataset(csv_file):
+    imported = import_csv_to_sqlite(csv_file)
+    if imported is None:
+        return None
+    return imported
+
+
+def export_sqlite_to_csv(csv_file):
+    dataset = get_sqlite_dataset(csv_file)
+    if dataset is None:
+        return False
+    columns = dataset['columns']
+    with get_db_connection() as conn:
+        rows = conn.execute(
+            'SELECT data_json FROM csv_rows WHERE csv_file = ? ORDER BY row_index ASC',
+            (csv_file,)
+        ).fetchall()
+    data = [json.loads(row['data_json']) for row in rows]
+    df = pd.DataFrame(data, columns=columns)
+    df.to_csv(csv_file, index=False)
+    import_csv_to_sqlite(csv_file, force=True)
+    return True
+
+
+SQL_COLUMN_BY_CSV_COLUMN = {
+    'title': 'title',
+    'ratingKey': 'rating_key',
+    'rating': 'rating',
+    'plex_rating': 'plex_rating',
+    'view_count': 'view_count',
+    'local_path': 'local_path',
+    'added_at': 'added_at',
+    'release_date': 'release_date',
+    'file_size': 'file_size',
+    'local_file_size': 'local_file_size',
+    'remote_file_size': 'remote_file_size',
+    'largest_file_size': 'largest_file_size',
+    'Bibliothèque': 'library',
+    'Action': 'action',
+}
+
+NUMERIC_FILTER_COLUMNS = {
+    'rating', 'plex_rating', 'view_count', 'file_size',
+    'local_file_size', 'remote_file_size', 'largest_file_size',
+    'number_of_local_episodes', 'number_of_remote_episodes'
+}
+DATE_FILTER_COLUMNS = {'added_at', 'release_date'}
+
+
+def get_distinct_csv_values(csv_file, sql_column):
+    with get_db_connection() as conn:
+        rows = conn.execute(
+            f'''
+            SELECT DISTINCT {sql_column} AS value
+            FROM csv_rows
+            WHERE csv_file = ? AND {sql_column} IS NOT NULL AND {sql_column} != ''
+            ORDER BY {sql_column} COLLATE NOCASE
+            ''',
+            (csv_file,)
+        ).fetchall()
+    return [row['value'] for row in rows]
+
+
+def data_json_value_expr(column_name):
+    return "json_extract(data_json, '$.' || ?)", [column_name]
+
+
+def add_column_filter(where_clauses, params, column_name, raw_value):
+    value = (raw_value or '').strip()
+    if not value:
+        return
+
+    sql_column = SQL_COLUMN_BY_CSV_COLUMN.get(column_name)
+    if sql_column:
+        expr = sql_column
+        expr_params = []
+    else:
+        expr, expr_params = data_json_value_expr(column_name)
+
+    operator_match = re.match(r'^(<=|>=|=|<|>)(.*)$', value)
+    if operator_match:
+        operator = operator_match.group(1)
+        filter_value = operator_match.group(2).strip()
+        if column_name in DATE_FILTER_COLUMNS:
+            where_clauses.append(f'{expr} {operator} ?')
+            params.extend(expr_params)
+            params.append(filter_value)
+            return
+
+        if column_name in NUMERIC_FILTER_COLUMNS or sql_column in {
+            'rating', 'plex_rating', 'view_count', 'file_size',
+            'local_file_size', 'remote_file_size', 'largest_file_size'
+        }:
+            where_clauses.append(f'COALESCE({expr}, 0) {operator} ?')
+            params.extend(expr_params)
+            params.append(parse_float_value(filter_value) or 0)
+            return
+
+    where_clauses.append(f'LOWER(COALESCE(CAST({expr} AS TEXT), "")) LIKE ?')
+    params.extend(expr_params)
+    params.append(f'%{value.lower()}%')
+
+
+def build_csv_where_clause(csv_file, visible_columns, request_args):
+    where_clauses = ['csv_file = ?']
+    params = [csv_file]
+
+    global_search = request_args.get('search[value]', '').strip()
+    if global_search:
+        search_clauses = []
+        for column_name in visible_columns:
+            sql_column = SQL_COLUMN_BY_CSV_COLUMN.get(column_name)
+            if sql_column:
+                search_clauses.append(f'LOWER(COALESCE(CAST({sql_column} AS TEXT), "")) LIKE ?')
+                params.append(f'%{global_search.lower()}%')
+            else:
+                search_clauses.append('LOWER(COALESCE(CAST(json_extract(data_json, ?) AS TEXT), "")) LIKE ?')
+                params.extend((f'$.{column_name}', f'%{global_search.lower()}%'))
+        if search_clauses:
+            where_clauses.append(f"({' OR '.join(search_clauses)})")
+
+    for column_name in visible_columns:
+        add_column_filter(
+            where_clauses,
+            params,
+            column_name,
+            request_args.get(f'column_filter_{column_name}', '')
+        )
+
+    return ' AND '.join(where_clauses), params
+
+
+def get_order_clause(visible_columns, request_args):
+    order_column_index = request_args.get('order[0][column]')
+    order_direction = request_args.get('order[0][dir]', 'asc')
+    direction = 'DESC' if order_direction == 'desc' else 'ASC'
+
+    try:
+        column_index = int(order_column_index)
+    except (TypeError, ValueError, IndexError):
+        return 'row_index ASC'
+
+    column_name = request_args.get(f'columns[{column_index}][name]', '')
+    if not column_name or column_name in ['select', 'miniature']:
+        return 'row_index ASC'
+    if column_name not in visible_columns:
+        return 'row_index ASC'
+
+    sql_column = SQL_COLUMN_BY_CSV_COLUMN.get(column_name)
+    if sql_column:
+        return f'{sql_column} {direction}, row_index ASC'
+
+    if not re.match(r'^[A-Za-z0-9_]+$', column_name):
+        return 'row_index ASC'
+
+    return f"json_extract(data_json, '$.{column_name}') COLLATE NOCASE {direction}, row_index ASC"
+
+
+def update_csv_actions_from_request(csv_file, form_data):
+    action_updates = []
+    for key, value in form_data.items():
+        if not key.startswith('action_') or value not in ['A', 'D']:
+            continue
+        try:
+            row_id = int(key.replace('action_', '', 1))
+        except ValueError:
+            continue
+        action_updates.append((row_id, value))
+
+    if not action_updates:
+        return
+
+    with get_db_connection() as conn:
+        for row_id, action in action_updates:
+            row = conn.execute(
+                'SELECT data_json FROM csv_rows WHERE id = ? AND csv_file = ?',
+                (row_id, csv_file)
+            ).fetchone()
+            if not row:
+                continue
+            data = json.loads(row['data_json'])
+            data['Action'] = action
+            conn.execute(
+                'UPDATE csv_rows SET data_json = ?, action = ? WHERE id = ? AND csv_file = ?',
+                (json.dumps(data, ensure_ascii=False), action, row_id, csv_file)
+            )
+
+    export_sqlite_to_csv(csv_file)
+
+
+def render_csv_cell(row_id, data, column_name):
+    value = normalize_csv_cell(data.get(column_name, 'N/A'))
+    safe_value = escape(value)
+
+    if column_name == '__select__':
+        return f'<input type="checkbox" class="row-select" name="selected_rows" value="{row_id}">'
+
+    if column_name == '__poster__':
+        poster_url = data.get('poster_url', 'N/A')
+        if poster_url and poster_url != 'N/A':
+            return (
+                f'<img src="/static/placeholder.jpg" data-actualsrc="{escape(str(poster_url), quote=True)}" '
+                'alt="Affiche" class="lazy-image">'
+            )
+        return '<img src="/static/no_image_available.jpg" alt="Pas d image">'
+
+    if column_name == 'title':
+        attrs = {
+            'poster-url': data.get('poster_url', 'N/A'),
+            'summary': data.get('summary', 'N/A'),
+            'release-date': data.get('release_date', 'N/A'),
+            'rating': data.get('rating', 'N/A'),
+            'plex-rating': data.get('plex_rating', 'N/A'),
+            'view-count': data.get('view_count', 'N/A'),
+            'genres': data.get('genres', 'N/A'),
+            'directors': data.get('directors', 'N/A'),
+            'actors': data.get('actors', 'N/A'),
+        }
+        data_attrs = ' '.join(
+            f'data-{key}="{escape(str(attr_value), quote=True)}"'
+            for key, attr_value in attrs.items()
+        )
+        return f'<a href="#" class="item-title" {data_attrs}>{safe_value}</a>'
+
+    return safe_value
+
+
+@app.route('/api/csv/<path:csv_file>/rows')
+def csv_rows_api(csv_file):
+    dataset = get_sqlite_dataset(csv_file)
+    if dataset is None:
+        return jsonify({'draw': int(request.args.get('draw', 0)), 'recordsTotal': 0, 'recordsFiltered': 0, 'data': []}), 404
+
+    columns = dataset['columns']
+    visible_columns = [column for column in columns if column not in HIDDEN_CSV_COLUMNS]
+    draw = int(request.args.get('draw', 0))
+    start = max(int(request.args.get('start', 0)), 0)
+    length = int(request.args.get('length', 30))
+    if length < 0:
+        length = 500
+    length = min(max(length, 1), 500)
+
+    where_clause, params = build_csv_where_clause(csv_file, visible_columns, request.args)
+    order_clause = get_order_clause(visible_columns, request.args)
+
+    with get_db_connection() as conn:
+        records_total = conn.execute(
+            'SELECT COUNT(*) AS count FROM csv_rows WHERE csv_file = ?',
+            (csv_file,)
+        ).fetchone()['count']
+        records_filtered = conn.execute(
+            f'SELECT COUNT(*) AS count FROM csv_rows WHERE {where_clause}',
+            params
+        ).fetchone()['count']
+        rows = conn.execute(
+            f'''
+            SELECT id, data_json
+            FROM csv_rows
+            WHERE {where_clause}
+            ORDER BY {order_clause}
+            LIMIT ? OFFSET ?
+            ''',
+            params + [length, start]
+        ).fetchall()
+
+    data_rows = []
+    for row in rows:
+        row_data = json.loads(row['data_json'])
+        rendered = [
+            render_csv_cell(row['id'], row_data, '__select__'),
+            render_csv_cell(row['id'], row_data, '__poster__'),
+        ]
+        rendered.extend(render_csv_cell(row['id'], row_data, column) for column in visible_columns)
+        data_rows.append(rendered)
+
+    return jsonify({
+        'draw': draw,
+        'recordsTotal': records_total,
+        'recordsFiltered': records_filtered,
+        'data': data_rows
+    })
+
+
+init_sqlite_store()
 
 
 def connect_to_plex(plex_url, plex_token):
@@ -537,6 +988,7 @@ def generate_csv(library_names, csv_file, media_type):
     combined_df = combined_df[columns_order]
     print(f"Écriture du DataFrame dans le fichier CSV '{csv_file}'.")
     combined_df.to_csv(csv_file, index=False)
+    import_csv_to_sqlite(csv_file, force=True)
     print(f"CSV '{csv_file}' généré avec succès.")
     return combined_df, csv_file
 
@@ -589,6 +1041,7 @@ def delete_items_from_csv_thread(csv_file, task_id):
                     tasks[task_id]['errors'].append(f"Erreur lors de la suppression de {row['title']}: {e}")
 
         df.to_csv(csv_file, index=False)
+        import_csv_to_sqlite(csv_file, force=True)
 
         with tasks_lock:
             if tasks[task_id]['errors']:
@@ -606,6 +1059,7 @@ def delete_items_from_csv_thread(csv_file, task_id):
 def compare_libraries_thread(local_library_names, friend_library_names, media_type, task_id):
     try:
         df, output_file, num_items, total_space_saved_gb = compare_libraries(local_library_names, friend_library_names, media_type)
+        import_csv_to_sqlite(output_file, force=True)
         with tasks_lock:
             tasks[task_id]['status'] = 'completed'
             tasks[task_id]['message'] = f"CSV {output_file} généré avec succès."
@@ -725,6 +1179,9 @@ def delete_csv():
         file_path = os.path.join(os.getcwd(), csv_file)
         if os.path.isfile(file_path):
             os.remove(csv_file)
+            with get_db_connection() as conn:
+                conn.execute('DELETE FROM csv_rows WHERE csv_file = ?', (csv_file,))
+                conn.execute('DELETE FROM csv_datasets WHERE csv_file = ?', (csv_file,))
             flash(f"Fichier {csv_file} supprimé avec succès.", 'success')
         else:
             flash(f"Le fichier {csv_file} n'existe pas.", 'danger')
@@ -857,37 +1314,24 @@ def task_status(task_id):
 
 @app.route('/view_csv/<path:csv_file>', methods=['GET', 'POST'])
 def view_csv(csv_file):
-    if os.path.exists(csv_file):
-        df = pd.read_csv(csv_file)
-        df = df.fillna('N/A')
-    else:
+    dataset = get_sqlite_dataset(csv_file)
+    if dataset is None:
         flash('Le fichier CSV spécifié n\'existe pas.', 'danger')
         return redirect(url_for('index'))
 
-    if 'ratingKey' not in df.columns:
-        df['ratingKey'] = 'N/A'
-
-    date_columns = ['added_at', 'release_date']
-    for col in date_columns:
-        if col in df.columns:
-            df[col] = pd.to_datetime(df[col], format='%Y-%m-%d', errors='coerce')
-
-    unique_libraries = sorted(df['Bibliothèque'].unique().tolist()) if 'Bibliothèque' in df.columns else []
-    unique_actions = sorted(df['Action'].dropna().unique().tolist()) if 'Action' in df.columns else []
-
     if request.method == 'POST':
-        for index, row in df.iterrows():
-            action = request.form.get(f'action_{index}')
-            if action in ['A', 'D']:
-                df.at[index, 'Action'] = action
-        df.to_csv(csv_file, index=False)
+        update_csv_actions_from_request(csv_file, request.form)
         flash('CSV mis à jour avec succès.', 'success')
         return redirect(url_for('view_csv', csv_file=csv_file))
 
+    columns = dataset['columns']
+    unique_libraries = get_distinct_csv_values(csv_file, 'library') if 'Bibliothèque' in columns else []
+    unique_actions = get_distinct_csv_values(csv_file, 'action') if 'Action' in columns else []
+
     return render_template(
         'view_csv.html',
-        df=df,
-        titles=df.columns.values,
+        row_count=dataset['row_count'],
+        titles=columns,
         csv_file=csv_file,
         unique_libraries=unique_libraries,
         unique_actions=unique_actions
@@ -911,6 +1355,7 @@ def view_existing_csv(library):
 
 @app.route('/process_csv/<path:csv_file>', methods=['POST'])
 def process_csv(csv_file):
+    export_sqlite_to_csv(csv_file)
     task_id = str(uuid4())
     with tasks_lock:
         tasks[task_id] = {
@@ -925,6 +1370,7 @@ def process_csv(csv_file):
 
 @app.route('/download/<path:csv_file>')
 def download_csv(csv_file):
+    export_sqlite_to_csv(csv_file)
     return send_from_directory(directory=os.getcwd(), path=csv_file, as_attachment=True)
 
 @app.route('/settings', methods=['GET', 'POST'])
