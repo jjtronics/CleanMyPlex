@@ -403,7 +403,7 @@ def update_csv_actions_from_request(csv_file, form_data):
         action_updates.append((row_id, value))
 
     if not action_updates:
-        return
+        return 0
 
     with get_db_connection() as conn:
         for row_id, action in action_updates:
@@ -421,6 +421,7 @@ def update_csv_actions_from_request(csv_file, form_data):
             )
 
     export_sqlite_to_csv(csv_file)
+    return len(action_updates)
 
 
 def render_csv_cell(row_id, data, column_name):
@@ -1363,7 +1364,13 @@ def view_csv(csv_file):
         return redirect(url_for('index'))
 
     if request.method == 'POST':
-        update_csv_actions_from_request(csv_file, request.form)
+        updated_count = update_csv_actions_from_request(csv_file, request.form)
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({
+                'status': 'success',
+                'message': 'CSV mis à jour avec succès.',
+                'updated': updated_count,
+            })
         flash('CSV mis à jour avec succès.', 'success')
         return redirect(url_for('view_csv', csv_file=csv_file))
 

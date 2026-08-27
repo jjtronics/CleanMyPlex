@@ -107,15 +107,16 @@
             {% if csv_file in ['common_movies.csv', 'common_series.csv'] %}
                 <div class="action-buttons">
                     <button type="button" id="set_selected_d" class="btn btn-secondary">Définir les sélectionnés en suppression locale</button>
-                    <button type="submit" class="btn btn-primary">Enregistrer les modifications</button>
+                    <button type="submit" class="btn btn-primary js-save-csv">Enregistrer les modifications</button>
                 </div>
             {% else %}
                 <div class="action-buttons">
                     <button type="button" id="set_selected_a" class="btn btn-secondary">Définir les sélectionnés en archive</button>
                     <button type="button" id="set_selected_d" class="btn btn-secondary">Définir les sélectionnés en suppression</button>
-                    <button type="submit" class="btn btn-primary">Enregistrer les modifications</button>
+                    <button type="submit" class="btn btn-primary js-save-csv">Enregistrer les modifications</button>
                 </div>
             {% endif %}
+            <div class="csv-save-status" id="csv-save-status" role="status" aria-live="polite"></div>
         </form>
 
         <!-- Boutons "Télécharger le CSV" et "Traiter le CSV" -->
@@ -416,6 +417,48 @@
             table.draw();
         });
 
+        $('#csvForm').on('submit', function(e) {
+            e.preventDefault();
+
+            var form = this;
+            var saveButton = $('.js-save-csv');
+            var status = $('#csv-save-status');
+            var originalLabel = saveButton.first().text();
+
+            saveButton.prop('disabled', true).text('Enregistrement...');
+            status.removeClass('is-error is-success').addClass('is-visible').text('Sauvegarde en cours...');
+
+            fetch(form.action || window.location.href, {
+                method: 'POST',
+                body: new FormData(form),
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(function(response) {
+                return response.json().then(function(payload) {
+                    if (!response.ok || payload.status !== 'success') {
+                        throw new Error(payload.message || 'Sauvegarde impossible.');
+                    }
+                    return payload;
+                });
+            })
+            .then(function(payload) {
+                var updated = payload.updated || 0;
+                $('.pending-action-input').remove();
+                status.removeClass('is-error').addClass('is-success').text(
+                    updated > 0 ? updated + ' modification(s) enregistrée(s).' : 'Aucune modification à enregistrer.'
+                );
+                table.ajax.reload(null, false);
+            })
+            .catch(function(error) {
+                status.removeClass('is-success').addClass('is-error').text(error.message || 'Erreur pendant la sauvegarde.');
+            })
+            .finally(function() {
+                saveButton.prop('disabled', false).text(originalLabel);
+            });
+        });
+
         // Gestionnaire d'événements pour les titres
         $('#csvTable tbody').on('click', '.item-title', function(e) {
             e.preventDefault();
@@ -496,10 +539,12 @@
                 var row = $(this).closest('tr');
                 var index = $(this).val();
                 // Ajouter un champ caché pour envoyer l'action au serveur
+                $('input[name="action_' + index + '"]').remove();
                 $('<input>').attr({
                     type: 'hidden',
                     name: 'action_' + index,
-                    value: action
+                    value: action,
+                    class: 'pending-action-input'
                 }).appendTo('#csvForm');
                 // Mettre à jour la colonne "Action" dans le tableau affiché
                 var actionCell = row.find('td[data-title="Action"]');

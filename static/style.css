@@ -1024,6 +1024,34 @@ select[multiple] {
     backdrop-filter: blur(12px);
 }
 
+.csv-save-status {
+    display: none;
+    margin: 0.65rem 0 0;
+    border: 1px solid rgba(125, 211, 252, 0.28);
+    border-radius: 8px;
+    background: rgba(8, 47, 73, 0.58);
+    color: #dbeafe;
+    font-size: 0.88rem;
+    font-weight: 650;
+    padding: 0.62rem 0.78rem;
+}
+
+.csv-save-status.is-visible {
+    display: block;
+}
+
+.csv-save-status.is-success {
+    border-color: rgba(52, 211, 153, 0.36);
+    background: rgba(6, 78, 59, 0.52);
+    color: #d1fae5;
+}
+
+.csv-save-status.is-error {
+    border-color: rgba(248, 113, 113, 0.42);
+    background: rgba(127, 29, 29, 0.54);
+    color: #fee2e2;
+}
+
 .csv-table-footer .dataTables_info {
     color: #dbeafe !important;
     font-weight: 650;
