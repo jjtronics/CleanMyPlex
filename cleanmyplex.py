@@ -1,6 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, jsonify, Response, send_file
 import requests
-import pandas as pd
 from plexapi.server import PlexServer
 from plexapi.myplex import MyPlexAccount
 import json
@@ -53,6 +52,7 @@ HIDDEN_CSV_COLUMNS = ['poster_url', 'summary', 'genres', 'directors', 'actors']
 
 plex = None
 account = None
+pd = None
 connection_status = {
     'plex_error': None,
     'account_error': None,
@@ -68,6 +68,18 @@ tasks_lock = threading.Lock()
 # Assurez-vous que le répertoire de cache des affiches existe
 if not os.path.exists('static/poster_cache'):
     os.makedirs('static/poster_cache')
+
+
+def get_pandas():
+    global pd
+    if pd is None:
+        import pandas as pandas
+        pd = pandas
+    return pd
+
+
+def is_missing_value(value):
+    return value is None or value != value
 
 
 def get_db_connection():
@@ -125,7 +137,7 @@ def init_sqlite_store():
 
 
 def parse_size_gb(value):
-    if value is None or pd.isna(value):
+    if is_missing_value(value):
         return None
     match = re.search(r'-?\d+(?:[.,]\d+)?', str(value))
     if not match:
@@ -134,7 +146,7 @@ def parse_size_gb(value):
 
 
 def parse_float_value(value):
-    if value is None or pd.isna(value):
+    if is_missing_value(value):
         return None
     try:
         return float(str(value).replace(',', '.').replace(' Go', '').strip())
@@ -143,7 +155,7 @@ def parse_float_value(value):
 
 
 def normalize_csv_cell(value):
-    if value is None or pd.isna(value):
+    if is_missing_value(value):
         return 'N/A'
     if hasattr(value, 'strftime'):
         return value.strftime('%Y-%m-%d')
@@ -152,6 +164,7 @@ def normalize_csv_cell(value):
 
 
 def load_csv_dataframe(csv_file):
+    pd = get_pandas()
     df = pd.read_csv(csv_file)
     df = df.fillna('N/A')
     if 'ratingKey' not in df.columns:
@@ -237,6 +250,7 @@ def get_sqlite_dataset(csv_file):
 
 
 def export_sqlite_to_csv(csv_file):
+    pd = get_pandas()
     dataset = get_sqlite_dataset(csv_file)
     if dataset is None:
         return False
@@ -842,6 +856,7 @@ def get_library_sections(plex_server, media_type):
         return []
 
 def compare_libraries(library_names_local, library_names_friend, media_type):
+    pd = get_pandas()
     friend_server = account.resource(FRIEND_SERVER_NAME).connect()
 
     if "ALL" in library_names_friend:
@@ -1012,6 +1027,7 @@ def compare_libraries(library_names_local, library_names_friend, media_type):
 
 
 def generate_csv(library_names, csv_file, media_type):
+    pd = get_pandas()
     print(f"generate_csv appelé avec library_names={library_names}, csv_file='{csv_file}', media_type='{media_type}'")
     if os.path.exists(csv_file):
         print(f"Le fichier CSV '{csv_file}' existe déjà. Chargement des données existantes.")
@@ -1195,6 +1211,7 @@ def generate_csv_thread(library_names, csv_file, media_type, task_id):
 # Nouvelle fonction pour la suppression en tâche de fond
 def delete_items_from_csv_thread(csv_file, task_id):
     try:
+        pd = get_pandas()
         if not os.path.exists(csv_file):
             with tasks_lock:
                 tasks[task_id]['status'] = 'failed'
@@ -1211,13 +1228,13 @@ def delete_items_from_csv_thread(csv_file, task_id):
         for index, row in items_to_delete.iterrows():
             try:
                 rating_key = row.get('ratingKey')
-                if pd.notna(rating_key):
+                if not is_missing_value(rating_key):
                     try:
                         item = plex.fetchItem(int(rating_key))
                     except Exception as fetch_error:
                         local_path = row.get('local_path')
                         path_is_missing = (
-                            pd.isna(local_path)
+                            is_missing_value(local_path)
                             or str(local_path).strip() in ['', 'N/A']
                             or not os.path.exists(str(local_path))
                         )
