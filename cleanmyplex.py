@@ -9,6 +9,7 @@ import re
 import sqlite3
 import threading
 import time
+from urllib.parse import urljoin
 from html import escape
 from uuid import uuid4
 
@@ -616,6 +617,34 @@ def get_friend_server_names():
     except Exception as e:
         app.logger.warning("Impossible de récupérer la liste des serveurs amis: %s", e)
         return []
+
+
+def probe_plex_server():
+    if not PLEX_URL or not PLEX_TOKEN:
+        return False, 'URL ou token Plex manquant.'
+
+    try:
+        response = requests.get(
+            urljoin(PLEX_URL.rstrip('/') + '/', 'identity'),
+            headers={'X-Plex-Token': PLEX_TOKEN},
+            timeout=2
+        )
+        response.raise_for_status()
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
+@app.route('/api/plex_status')
+def plex_status_api():
+    if connection_status['refreshing']:
+        return jsonify({'status': 'checking', 'label': 'Connexion Plex...'})
+
+    is_available, error_message = probe_plex_server()
+    if is_available:
+        return jsonify({'status': 'ok', 'label': 'Plex connecté'})
+
+    return jsonify({'status': 'down', 'label': 'Plex hors ligne', 'error': error_message})
 
 
 @app.context_processor

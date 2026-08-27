@@ -37,16 +37,21 @@
             </span>
         </a>
 
-        <div class="health-strip" aria-label="Etat de la connexion Plex">
+        <div
+            class="plex-status"
+            id="plex-status"
+            data-status-url="{{ url_for('plex_status_api') }}"
+            aria-live="polite"
+        >
             {% if connection_status.refreshing %}
-                <span class="health-strip__dot health-strip__dot--warn"></span>
-                <span class="health-strip__text">Connexion Plex...</span>
-            {% elif connection_status.has_issues %}
-                <span class="health-strip__dot health-strip__dot--crit"></span>
-                <span class="health-strip__text">Mode dégradé</span>
+                <span class="plex-status__dot plex-status__dot--checking"></span>
+                <span class="plex-status__label">Connexion Plex...</span>
+            {% elif connection_status.plex_error %}
+                <span class="plex-status__dot plex-status__dot--down"></span>
+                <span class="plex-status__label">Plex hors ligne</span>
             {% else %}
-                <span class="health-strip__dot health-strip__dot--ok"></span>
-                <span class="health-strip__text">Plex connecté</span>
+                <span class="plex-status__dot plex-status__dot--ok"></span>
+                <span class="plex-status__label">Plex connecté</span>
             {% endif %}
         </div>
 
@@ -182,6 +187,36 @@
 
                 showPageLoader('Traitement de la demande...');
             });
+
+            var plexStatus = document.getElementById('plex-status');
+            if (plexStatus) {
+                var plexStatusUrl = plexStatus.getAttribute('data-status-url');
+                var plexStatusDot = plexStatus.querySelector('.plex-status__dot');
+                var plexStatusLabel = plexStatus.querySelector('.plex-status__label');
+
+                function setPlexStatus(status, label) {
+                    if (!plexStatusDot || !plexStatusLabel) {
+                        return;
+                    }
+
+                    plexStatusDot.className = 'plex-status__dot plex-status__dot--' + status;
+                    plexStatusLabel.textContent = label;
+                }
+
+                function refreshPlexStatus() {
+                    fetch(plexStatusUrl, { cache: 'no-store' })
+                        .then(function(response) { return response.json(); })
+                        .then(function(data) {
+                            setPlexStatus(data.status || 'down', data.label || 'Plex hors ligne');
+                        })
+                        .catch(function() {
+                            setPlexStatus('down', 'Plex hors ligne');
+                        });
+                }
+
+                refreshPlexStatus();
+                window.setInterval(refreshPlexStatus, 10000);
+            }
         })();
     </script>
     {% block scripts %}{% endblock %}
