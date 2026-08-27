@@ -14,6 +14,15 @@
 
         <form method="post" id="csvForm">
             <div class="csv-table-card">
+                <div class="csv-loading-overlay" id="csv-loading-overlay">
+                    <div class="csv-loading-card">
+                        <div class="loader-ring loader-ring--large" aria-hidden="true"></div>
+                        <div>
+                            <strong>Preparation du tableau</strong>
+                            <span>Indexation locale, filtres et colonnes...</span>
+                        </div>
+                    </div>
+                </div>
                 <table class="table table-bordered" id="csvTable">
                 <thead>
                     <tr>
@@ -244,6 +253,7 @@
                 window.setTimeout(function() {
                     table.columns.adjust();
                     syncCsvHorizontalScrollWidth();
+                    hideCsvLoader();
                 }, 0);
             },
             "footerCallback": function ( row, data, start, end, display ) {
@@ -306,6 +316,15 @@
                 calculateFileSizeTotal('largest_file_size');
             }
         });
+
+        window.setTimeout(function() {
+            hideCsvLoader();
+        }, 1200);
+
+        function hideCsvLoader() {
+            $('#csv-loading-overlay').addClass('is-hidden');
+            $('#page-loading-overlay').removeClass('is-visible').attr('aria-hidden', 'true');
+        }
 
         // Fonction pour charger les images des lignes visibles
         function loadVisibleImages() {
