@@ -956,6 +956,12 @@ select[multiple] {
     color: #93c5fd;
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
     font-size: 0.76rem;
+    max-width: 30rem !important;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal !important;
+    word-break: break-word;
 }
 
 .csv-table-card table.dataTable.display tbody tr,
@@ -1208,7 +1214,13 @@ table td.file_size {
 
 .csv-table-card table.dataTable tbody td[data-title="local_path"] {
     width: 30rem !important;
+    min-width: 30rem !important;
     max-width: 30rem !important;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    white-space: normal !important;
+    word-break: break-word;
 }
 
 .csv-table-card table.dataTable tbody td[data-title="file_size"],
