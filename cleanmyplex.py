@@ -1021,18 +1021,48 @@ def delete_items_from_csv_thread(csv_file, task_id):
 
         total_items = len(items_to_delete)
         deleted_items = 0
+        already_absent_items = 0
 
         for index, row in items_to_delete.iterrows():
             try:
                 rating_key = row.get('ratingKey')
                 if pd.notna(rating_key):
-                    item = plex.fetchItem(int(rating_key))
+                    try:
+                        item = plex.fetchItem(int(rating_key))
+                    except Exception as fetch_error:
+                        local_path = row.get('local_path')
+                        path_is_missing = (
+                            pd.isna(local_path)
+                            or str(local_path).strip() in ['', 'N/A']
+                            or not os.path.exists(str(local_path))
+                        )
+
+                        if path_is_missing:
+                            df.drop(index, inplace=True)
+                            already_absent_items += 1
+                            with tasks_lock:
+                                tasks[task_id]['progress'] = (
+                                    f"{deleted_items} supprimés, {already_absent_items} déjà absents "
+                                    f"sur {total_items} éléments."
+                                )
+                            continue
+
+                        with tasks_lock:
+                            tasks[task_id]['errors'].append(
+                                f"{row['title']} introuvable dans Plex avec ratingKey {rating_key}, "
+                                f"mais le fichier existe encore ({local_path}) : {fetch_error}"
+                            )
+                        continue
+
                     item.delete()
                     df.drop(index, inplace=True)
                     deleted_items += 1
 
                     with tasks_lock:
-                        tasks[task_id]['progress'] = f"{deleted_items}/{total_items} éléments supprimés."
+                        tasks[task_id]['progress'] = (
+                            f"{deleted_items} supprimés, {already_absent_items} déjà absents "
+                            f"sur {total_items} éléments."
+                        )
                 else:
                     with tasks_lock:
                         tasks[task_id]['errors'].append(f"Clé de notation invalide pour {row['title']}.")
@@ -1046,10 +1076,16 @@ def delete_items_from_csv_thread(csv_file, task_id):
         with tasks_lock:
             if tasks[task_id]['errors']:
                 tasks[task_id]['status'] = 'completed_with_errors'
-                tasks[task_id]['message'] = f"Suppression terminée avec des erreurs. {deleted_items}/{total_items} éléments supprimés."
+                tasks[task_id]['message'] = (
+                    f"Suppression terminée avec des erreurs. {deleted_items} supprimés, "
+                    f"{already_absent_items} déjà absents sur {total_items} éléments."
+                )
             else:
                 tasks[task_id]['status'] = 'completed'
-                tasks[task_id]['message'] = f"Suppression terminée avec succès. {deleted_items} éléments supprimés."
+                tasks[task_id]['message'] = (
+                    f"Suppression terminée avec succès. {deleted_items} supprimés, "
+                    f"{already_absent_items} déjà absents."
+                )
 
     except Exception as e:
         with tasks_lock:
