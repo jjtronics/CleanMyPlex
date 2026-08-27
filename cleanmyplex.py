@@ -711,6 +711,18 @@ def build_history_title(item):
     return title
 
 
+def fetch_full_media_from_history(item):
+    rating_key = getattr(item, 'ratingKey', None)
+    if not rating_key:
+        return None
+
+    try:
+        return plex.fetchItem(rating_key)
+    except Exception as e:
+        app.logger.warning("Impossible de récupérer le média complet Plex %s: %s", rating_key, e)
+        return None
+
+
 def get_user_last_played(user):
     account_id = str(safe_user_attr(user, 'id', default='')).strip()
 
@@ -736,11 +748,14 @@ def get_user_last_played(user):
         if latest_item is None:
             return None
 
+        full_media = fetch_full_media_from_history(latest_item)
+        media_for_details = full_media or latest_item
+
         return {
             'title': build_history_title(latest_item),
-            'type': display_value(getattr(latest_item, 'type', 'N/A')),
-            'year': display_value(getattr(latest_item, 'year', 'N/A')),
-            'library': display_value(getattr(latest_item, 'librarySectionTitle', 'N/A')),
+            'type': display_value(getattr(media_for_details, 'type', getattr(latest_item, 'type', 'N/A'))),
+            'year': display_value(getattr(media_for_details, 'year', getattr(latest_item, 'year', 'N/A'))),
+            'library': display_value(getattr(media_for_details, 'librarySectionTitle', getattr(latest_item, 'librarySectionTitle', 'N/A'))),
             'viewed_at': format_datetime(latest_viewed_at),
         }
     except Exception as e:

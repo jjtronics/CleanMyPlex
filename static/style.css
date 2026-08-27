@@ -943,6 +943,9 @@ select[multiple] {
 }
 
 .detail-card {
+    display: grid;
+    gap: 0.35rem;
+    align-content: start;
     min-width: 0;
     padding: 0.9rem;
 }
@@ -952,15 +955,23 @@ select[multiple] {
 }
 
 .detail-card span {
-    margin-bottom: 0.3rem;
     color: var(--color-text-muted);
     font-size: 0.72rem;
     font-weight: 800;
+    line-height: 1.2;
     text-transform: uppercase;
 }
 
 .detail-card strong {
+    display: block;
+    color: #ffffff;
+    font-size: 0.95rem;
+    line-height: 1.35;
     overflow-wrap: anywhere;
+}
+
+.detail-card strong .status-pill {
+    vertical-align: top;
 }
 
 .empty-state {
