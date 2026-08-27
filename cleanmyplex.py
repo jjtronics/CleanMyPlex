@@ -675,6 +675,79 @@ def display_value(value):
         return ', '.join(f'{key}: {val}' for key, val in value.items()) if value else 'N/A'
     return str(value)
 
+
+def format_datetime(value):
+    if hasattr(value, 'strftime'):
+        return value.strftime('%Y-%m-%d %H:%M:%S')
+    return display_value(value)
+
+
+def history_item_matches_user(item, user):
+    account_id = str(safe_user_attr(user, 'id', default='')).strip()
+    username = str(safe_user_attr(user, 'username', default='')).strip()
+    item_account_id = str(getattr(item, 'accountID', '') or getattr(item, 'accountId', '')).strip()
+    item_username = str(getattr(item, 'username', '') or getattr(item, 'user', '')).strip()
+
+    if account_id and item_account_id:
+        return item_account_id == account_id
+    if username and item_username:
+        return item_username == username
+    return False
+
+
+def build_history_title(item):
+    title = display_value(getattr(item, 'title', 'N/A'))
+    grandparent_title = display_value(getattr(item, 'grandparentTitle', 'N/A'))
+    parent_title = display_value(getattr(item, 'parentTitle', 'N/A'))
+
+    if grandparent_title != 'N/A':
+        parts = [grandparent_title]
+        if parent_title != 'N/A':
+            parts.append(parent_title)
+        if title != 'N/A':
+            parts.append(title)
+        return ' - '.join(parts)
+
+    return title
+
+
+def get_user_last_played(user):
+    account_id = str(safe_user_attr(user, 'id', default='')).strip()
+
+    try:
+        try:
+            history = plex.history(maxresults=200, accountID=account_id) if account_id else plex.history(maxresults=200)
+            history_is_user_scoped = bool(account_id)
+        except TypeError:
+            history = plex.history(maxresults=200)
+            history_is_user_scoped = False
+
+        latest_item = None
+        latest_viewed_at = None
+        for item in history:
+            if not history_is_user_scoped and not history_item_matches_user(item, user):
+                continue
+
+            viewed_at = getattr(item, 'viewedAt', None)
+            if latest_item is None or (viewed_at and (latest_viewed_at is None or viewed_at > latest_viewed_at)):
+                latest_item = item
+                latest_viewed_at = viewed_at
+
+        if latest_item is None:
+            return None
+
+        return {
+            'title': build_history_title(latest_item),
+            'type': display_value(getattr(latest_item, 'type', 'N/A')),
+            'year': display_value(getattr(latest_item, 'year', 'N/A')),
+            'library': display_value(getattr(latest_item, 'librarySectionTitle', 'N/A')),
+            'viewed_at': format_datetime(latest_viewed_at),
+        }
+    except Exception as e:
+        app.logger.warning("Impossible de récupérer le dernier média lu pour %s: %s", user.username, e)
+        return None
+
+
 def get_last_activity(user):
     try:
         last_activity = None
@@ -1222,6 +1295,7 @@ def user_details(username):
 
         sessions = get_active_sessions()
         session_info = next((session for session in sessions if session['username'] == user.username), None)
+        last_played = get_user_last_played(user)
 
         user_info = {
             'username': user.username,
@@ -1243,6 +1317,7 @@ def user_details(username):
             'subscriptionType': safe_user_attr(user, 'subscriptionType', default='Gratuit'),
             'is_active': "Oui" if session_info else "Non",
             'session': session_info,
+            'last_played': last_played,
         }
 
         return render_template('user_details.html', user=user_info)

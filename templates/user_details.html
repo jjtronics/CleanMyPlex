@@ -31,7 +31,7 @@
     </div>
     <div class="detail-card">
         <span>Plex Home</span>
-        <strong>{{ user.homeUser }}</strong>
+        <strong><span class="status-pill {% if user.homeUser == 'Oui' %}status-pill--ok{% else %}status-pill--muted{% endif %}">{{ user.homeUser }}</span></strong>
     </div>
     <div class="detail-card">
         <span>Adresse IP</span>
@@ -43,9 +43,44 @@
     </div>
     <div class="detail-card">
         <span>Actif</span>
-        <strong>{{ user.is_active }}</strong>
+        <strong><span class="status-pill {% if user.is_active == 'Oui' %}status-pill--ok{% else %}status-pill--muted{% endif %}">{{ user.is_active }}</span></strong>
     </div>
 </div>
+
+<div class="section-header">
+    <h2>Dernière utilisation</h2>
+    <span>Dernière entrée trouvée dans l’historique Plex du serveur.</span>
+</div>
+
+{% if user.last_played %}
+    <div class="detail-grid">
+        <div class="detail-card detail-card--wide">
+            <span>Dernier média lu</span>
+            <strong>{{ user.last_played.title }}</strong>
+        </div>
+        <div class="detail-card">
+            <span>Date</span>
+            <strong>{{ user.last_played.viewed_at }}</strong>
+        </div>
+        <div class="detail-card">
+            <span>Type</span>
+            <strong>{{ user.last_played.type }}</strong>
+        </div>
+        <div class="detail-card">
+            <span>Bibliothèque</span>
+            <strong>{{ user.last_played.library }}</strong>
+        </div>
+        <div class="detail-card">
+            <span>Année</span>
+            <strong>{{ user.last_played.year }}</strong>
+        </div>
+    </div>
+{% else %}
+    <div class="empty-state">
+        <strong>Aucune lecture trouvée</strong>
+        <span>L’historique Plex ne contient pas de média récent rattaché à cet utilisateur.</span>
+    </div>
+{% endif %}
 
 <div class="section-header">
     <h2>Permissions</h2>
@@ -55,19 +90,19 @@
 <div class="detail-grid">
     <div class="detail-card">
         <span>Compte restreint</span>
-        <strong>{{ user.restricted }}</strong>
+        <strong><span class="status-pill {% if user.restricted == 'Oui' %}status-pill--ok{% else %}status-pill--muted{% endif %}">{{ user.restricted }}</span></strong>
     </div>
     <div class="detail-card">
         <span>Sync autorisée</span>
-        <strong>{{ user.allowSync }}</strong>
+        <strong><span class="status-pill {% if user.allowSync == 'Oui' %}status-pill--ok{% else %}status-pill--muted{% endif %}">{{ user.allowSync }}</span></strong>
     </div>
     <div class="detail-card">
         <span>Channels autorisés</span>
-        <strong>{{ user.allowChannels }}</strong>
+        <strong><span class="status-pill {% if user.allowChannels == 'Oui' %}status-pill--ok{% else %}status-pill--muted{% endif %}">{{ user.allowChannels }}</span></strong>
     </div>
     <div class="detail-card">
         <span>Upload caméra</span>
-        <strong>{{ user.allowCameraUpload }}</strong>
+        <strong><span class="status-pill {% if user.allowCameraUpload == 'Oui' %}status-pill--ok{% else %}status-pill--muted{% endif %}">{{ user.allowCameraUpload }}</span></strong>
     </div>
 </div>
 
