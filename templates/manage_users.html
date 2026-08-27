@@ -12,8 +12,8 @@
     <span>{{ users|length }} utilisateur(s) Plex</span>
 </div>
 
-<div class="operator-table">
-    <table class="table table-bordered">
+<div class="operator-table data-workspace">
+    <table class="table table-bordered" id="usersTable">
         <thead>
         <tr>
             <th>Utilisateur</th>
@@ -22,7 +22,7 @@
             <th>Rôle</th>
             <th>Activité</th>
             <th>IP publique</th>
-            <th></th>
+            <th>Actions</th>
         </tr>
         </thead>
         <tbody>
@@ -51,4 +51,37 @@
         </tbody>
     </table>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    $(document).ready(function() {
+        $('#usersTable').DataTable({
+            paging: true,
+            searching: true,
+            ordering: true,
+            autoWidth: false,
+            pageLength: 25,
+            lengthMenu: [[10, 25, 50, -1], [10, 25, 50, "Tous"]],
+            dom: '<"csv-table-controls"<"csv-table-controls__left"l><"csv-table-controls__right"f>>rt<"csv-table-footer"ip>',
+            language: {
+                search: "Recherche :",
+                lengthMenu: "Afficher _MENU_ utilisateurs",
+                zeroRecords: "Aucun utilisateur trouvé",
+                info: "Affichage de _START_ à _END_ sur _TOTAL_ utilisateurs",
+                infoEmpty: "Aucun utilisateur",
+                infoFiltered: "(filtré à partir de _MAX_ utilisateurs)",
+                paginate: {
+                    first: "Premier",
+                    last: "Dernier",
+                    next: "Suivant",
+                    previous: "Précédent"
+                }
+            },
+            columnDefs: [
+                { targets: -1, orderable: false, searchable: false }
+            ]
+        });
+    });
+</script>
 {% endblock %}
