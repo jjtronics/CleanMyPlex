@@ -273,6 +273,7 @@ NUMERIC_FILTER_COLUMNS = {
     'number_of_local_episodes', 'number_of_remote_episodes'
 }
 DATE_FILTER_COLUMNS = {'added_at', 'release_date'}
+EXACT_FILTER_COLUMNS = {'Bibliothèque', 'Action'}
 
 
 def get_distinct_csv_values(csv_file, sql_column):
@@ -323,6 +324,12 @@ def add_column_filter(where_clauses, params, column_name, raw_value):
             params.extend(expr_params)
             params.append(parse_float_value(filter_value) or 0)
             return
+
+    if column_name in EXACT_FILTER_COLUMNS:
+        where_clauses.append(f'COALESCE(CAST({expr} AS TEXT), "") = ?')
+        params.extend(expr_params)
+        params.append(value)
+        return
 
     where_clauses.append(f'LOWER(COALESCE(CAST({expr} AS TEXT), "")) LIKE ?')
     params.extend(expr_params)
