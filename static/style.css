@@ -1046,10 +1046,22 @@ select[multiple] {
     color: #d1fae5;
 }
 
+.csv-save-status.is-info {
+    border-color: rgba(125, 211, 252, 0.34);
+    background: rgba(12, 74, 110, 0.52);
+    color: #e0f2fe;
+}
+
 .csv-save-status.is-error {
     border-color: rgba(248, 113, 113, 0.42);
     background: rgba(127, 29, 29, 0.54);
     color: #fee2e2;
+}
+
+.csv-table-card table.dataTable tbody tr.csv-row-updated > td {
+    background: rgba(14, 165, 233, 0.18) !important;
+    box-shadow: inset 3px 0 0 #38bdf8;
+    transition: background 0.2s ease, box-shadow 0.2s ease;
 }
 
 .csv-table-footer .dataTables_info {

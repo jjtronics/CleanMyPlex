@@ -426,7 +426,7 @@
             var originalLabel = saveButton.first().text();
 
             saveButton.prop('disabled', true).text('Enregistrement...');
-            status.removeClass('is-error is-success').addClass('is-visible').text('Sauvegarde en cours...');
+            status.removeClass('is-error is-success is-info').addClass('is-visible').text('Sauvegarde en cours...');
 
             fetch(form.action || window.location.href, {
                 method: 'POST',
@@ -446,13 +446,13 @@
             .then(function(payload) {
                 var updated = payload.updated || 0;
                 $('.pending-action-input').remove();
-                status.removeClass('is-error').addClass('is-success').text(
+                status.removeClass('is-error is-info').addClass('is-success').text(
                     updated > 0 ? updated + ' modification(s) enregistrée(s).' : 'Aucune modification à enregistrer.'
                 );
                 table.ajax.reload(null, false);
             })
             .catch(function(error) {
-                status.removeClass('is-success').addClass('is-error').text(error.message || 'Erreur pendant la sauvegarde.');
+                status.removeClass('is-success is-info').addClass('is-error').text(error.message || 'Erreur pendant la sauvegarde.');
             })
             .finally(function() {
                 saveButton.prop('disabled', false).text(originalLabel);
@@ -535,7 +535,19 @@
 
         function setActionOnSelectedRows(action) {
             var rows = table.rows({ 'search': 'applied' }).nodes();
-            $('input[type="checkbox"].row-select:checked', rows).each(function() {
+            var selectedRows = $('input[type="checkbox"].row-select:checked', rows);
+            var status = $('#csv-save-status');
+            var actionLabel = action === 'A' ? 'archive' : 'suppression';
+
+            if (!selectedRows.length) {
+                status
+                    .removeClass('is-success is-info')
+                    .addClass('is-visible is-error')
+                    .text('Aucune ligne sélectionnée.');
+                return;
+            }
+
+            selectedRows.each(function() {
                 var row = $(this).closest('tr');
                 var index = $(this).val();
                 // Ajouter un champ caché pour envoyer l'action au serveur
@@ -551,7 +563,17 @@
                 if (actionCell.length) {
                     actionCell.text(action);
                 }
+                row.addClass('csv-row-updated');
             });
+
+            status
+                .removeClass('is-error is-success')
+                .addClass('is-visible is-info')
+                .text(selectedRows.length + ' ligne(s) marquée(s) pour ' + actionLabel + '. Pense à enregistrer.');
+
+            window.setTimeout(function() {
+                $('#csvTable tbody tr.csv-row-updated').removeClass('csv-row-updated');
+            }, 1300);
         }
     });
 </script>
