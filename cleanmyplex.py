@@ -533,7 +533,16 @@ def connect_to_plex(plex_url, plex_token):
         return None, str(e)
 
 
-def connect_to_account(username, password):
+def connect_to_account(username='', password='', token=''):
+    if token:
+        try:
+            plex_account = MyPlexAccount(token=token)
+            plex_account.resources()
+            return plex_account, None
+        except Exception as e:
+            app.logger.warning("Connexion au compte Plex par token impossible: %s", e)
+            return None, str(e)
+
     if not username and not password:
         return None, None
 
@@ -553,8 +562,8 @@ def refresh_connections():
     global plex, account
 
     plex, connection_status['plex_error'] = connect_to_plex(PLEX_URL, PLEX_TOKEN)
-    account, connection_status['account_error'] = connect_to_account(PLEX_USERNAME, PLEX_PASSWORD)
-    connection_status['account_configured'] = bool(PLEX_USERNAME and PLEX_PASSWORD)
+    account, connection_status['account_error'] = connect_to_account(PLEX_USERNAME, PLEX_PASSWORD, PLEX_TOKEN)
+    connection_status['account_configured'] = bool(PLEX_TOKEN or (PLEX_USERNAME and PLEX_PASSWORD))
 
 
 def ensure_required_connections(require_plex=False, require_account=False):
@@ -567,7 +576,7 @@ def ensure_required_connections(require_plex=False, require_account=False):
         if connection_status['account_configured']:
             errors.append(f"Connexion au compte Plex indisponible : {connection_status['account_error']}")
         else:
-            errors.append("Cette fonctionnalité nécessite les identifiants Plex (username et password).")
+            errors.append("Cette fonctionnalité nécessite un token Plex ou les identifiants Plex.")
 
     if errors:
         for error_message in errors:
@@ -1116,12 +1125,18 @@ def compare_libraries_thread(local_library_names, friend_library_names, media_ty
 def test_token():
     plex_url = request.form.get('PLEX_URL', config.get('PLEX_URL', ''))
     test_token = request.form['PLEX_TOKEN']
-    _, error_message = connect_to_plex(plex_url, test_token)
+    _, server_error = connect_to_plex(plex_url, test_token)
+    _, account_error = connect_to_account(token=test_token)
 
-    if error_message:
-        return jsonify({'status': 'error', 'message': f'Erreur : {error_message}'})
+    if server_error or account_error:
+        errors = []
+        if server_error:
+            errors.append(f'Serveur Plex : {server_error}')
+        if account_error:
+            errors.append(f'Compte Plex : {account_error}')
+        return jsonify({'status': 'error', 'message': 'Erreur : ' + ' | '.join(errors)})
 
-    return jsonify({'status': 'success', 'message': 'Connexion réussie avec ce token !'})
+    return jsonify({'status': 'success', 'message': 'Connexion serveur et compte réussie avec ce token !'})
 
 @app.route('/test_login', methods=['POST'])
 def test_login():
