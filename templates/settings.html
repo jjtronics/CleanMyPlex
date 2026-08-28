@@ -4,7 +4,7 @@
 
 {% block header_title %}Paramètres{% endblock %}
 
-{% block header_subtitle %}Configurer le serveur Plex, l’authentification et le serveur ami pour les comparaisons.{% endblock %}
+{% block header_subtitle %}Configurer Plex, les comparaisons et l’accès MCP pour les assistants IA.{% endblock %}
 
 {% block content %}
     <form method="post" id="settings-form" class="settings-grid">
@@ -27,8 +27,9 @@
             <div class="form-group">
                 <label for="PLEX_TOKEN">Token Plex</label>
                 <div class="input-action">
-                    <input type="text" class="form-control" id="PLEX_TOKEN" name="PLEX_TOKEN" value="{{ config.PLEX_TOKEN }}">
+                    <input type="password" class="form-control" id="PLEX_TOKEN" name="PLEX_TOKEN" value="{{ config.PLEX_TOKEN }}" autocomplete="off">
                     <button type="button" class="btn btn-secondary" id="test-token">Tester</button>
+                    <button type="button" class="btn btn-secondary secret-toggle" data-secret-toggle="PLEX_TOKEN" aria-label="Afficher le token Plex" title="Afficher le token Plex">&#128065;</button>
                 </div>
                 <div id="token-test-result" class="test-result"></div>
             </div>
@@ -40,7 +41,10 @@
                 </div>
                 <div class="form-group">
                     <label for="PLEX_PASSWORD">Password Plex</label>
-                    <input type="password" class="form-control" id="PLEX_PASSWORD" name="PLEX_PASSWORD" value="{{ config.PLEX_PASSWORD }}">
+                    <div class="input-action input-action--secret">
+                        <input type="password" class="form-control" id="PLEX_PASSWORD" name="PLEX_PASSWORD" value="{{ config.PLEX_PASSWORD }}" autocomplete="off">
+                        <button type="button" class="btn btn-secondary secret-toggle" data-secret-toggle="PLEX_PASSWORD" aria-label="Afficher le password Plex" title="Afficher le password Plex">&#128065;</button>
+                    </div>
                 </div>
             </div>
             <button type="button" class="btn btn-secondary" id="test-login">Tester le login</button>
@@ -80,6 +84,56 @@
             </div>
         </div>
 
+        <div class="settings-card">
+            <div class="section-header section-header--compact">
+                <h2>MCP</h2>
+                <span>Accès HTTP pour piloter CleanMyPlex depuis une IA compatible MCP.</span>
+            </div>
+            <div class="form-group">
+                <label for="MCP_API_KEY">Clé API MCP</label>
+                <div class="input-action">
+                    <input
+                        type="password"
+                        class="form-control"
+                        id="MCP_API_KEY"
+                        name="MCP_API_KEY"
+                        value="{{ config.MCP_API_KEY }}"
+                        {% if mcp_env_override %}disabled{% endif %}
+                        placeholder="Laisse vide uniquement sur un réseau de confiance"
+                    >
+                    <button type="button" class="btn btn-secondary" id="generate-mcp-key" {% if mcp_env_override %}disabled{% endif %}>Générer</button>
+                    <button type="button" class="btn btn-secondary secret-toggle" data-secret-toggle="MCP_API_KEY" aria-label="Afficher la clé MCP" title="Afficher la clé MCP">&#128065;</button>
+                </div>
+                {% if mcp_env_override %}
+                    <div class="field-hint">
+                        La clé effective vient de la variable d’environnement CLEANMYPLEX_MCP_API_KEY. Elle ne peut pas être modifiée depuis cette page.
+                    </div>
+                {% elif effective_mcp_api_key %}
+                    <div class="field-hint">MCP protégé par clé Bearer.</div>
+                {% else %}
+                    <div class="field-hint field-hint--warning">MCP actif sans clé. À réserver à un réseau de confiance.</div>
+                {% endif %}
+            </div>
+
+            <div class="mcp-endpoints">
+                <div>
+                    <span>Discovery</span>
+                    <code>{{ url_for('mcp_discovery', _external=True) }}</code>
+                </div>
+                <div>
+                    <span>Endpoint MCP</span>
+                    <code>{{ url_for('mcp_streamable_http', _external=True) }}</code>
+                </div>
+                <div>
+                    <span>Compat API</span>
+                    <code>{{ url_for('mcp_call_api', _external=True) }}</code>
+                </div>
+            </div>
+
+            <button type="button" class="btn btn-secondary" id="test-mcp">Tester le MCP</button>
+            <div id="mcp-test-result" class="test-result"></div>
+        </div>
+
         <div class="form-action-bar settings-actions">
             <button type="submit" class="btn btn-primary">Enregistrer les paramètres</button>
         </div>
@@ -90,6 +144,7 @@
         const tokenInput = document.getElementById('PLEX_TOKEN');
         const usernameInput = document.getElementById('PLEX_USERNAME');
         const passwordInput = document.getElementById('PLEX_PASSWORD');
+        const mcpKeyInput = document.getElementById('MCP_API_KEY');
         const authValidationResult = document.getElementById('auth-validation-result');
 
         function hasValidAuthenticationConfig() {
@@ -155,6 +210,56 @@
                 const resultDiv = document.getElementById('login-test-result');
                 resultDiv.textContent = data.message;
                 resultDiv.className = data.status === 'success' ? 'test-result is-visible is-success' : 'test-result is-visible is-error';
+            });
+        });
+
+        document.getElementById('generate-mcp-key').addEventListener('click', function() {
+            if (!mcpKeyInput || mcpKeyInput.disabled) {
+                return;
+            }
+
+            const bytes = new Uint8Array(32);
+            window.crypto.getRandomValues(bytes);
+            mcpKeyInput.value = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+            mcpKeyInput.type = 'text';
+        });
+
+        document.querySelectorAll('[data-secret-toggle]').forEach(function(button) {
+            button.addEventListener('click', function() {
+                const input = document.getElementById(button.dataset.secretToggle);
+                if (!input) {
+                    return;
+                }
+
+                const shouldShow = input.type === 'password';
+                input.type = shouldShow ? 'text' : 'password';
+                const label = button.getAttribute('aria-label') || '';
+                const nextLabel = shouldShow ? label.replace('Afficher', 'Masquer') : label.replace('Masquer', 'Afficher');
+                button.setAttribute('aria-label', nextLabel);
+                button.setAttribute('title', nextLabel);
+                button.classList.toggle('secret-toggle--visible', shouldShow);
+            });
+        });
+
+        document.getElementById('test-mcp').addEventListener('click', function() {
+            const key = mcpKeyInput && !mcpKeyInput.disabled ? mcpKeyInput.value : '';
+            fetch('/test_mcp', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams({ MCP_API_KEY: key }),
+            })
+            .then(response => response.json())
+            .then(data => {
+                const resultDiv = document.getElementById('mcp-test-result');
+                resultDiv.textContent = `${data.message} ${data.tools} outils exposés.`;
+                resultDiv.className = data.status === 'success' ? 'test-result is-visible is-success' : 'test-result is-visible is-error';
+            })
+            .catch(error => {
+                const resultDiv = document.getElementById('mcp-test-result');
+                resultDiv.textContent = error.message || 'Test MCP impossible.';
+                resultDiv.className = 'test-result is-visible is-error';
             });
         });
     </script>

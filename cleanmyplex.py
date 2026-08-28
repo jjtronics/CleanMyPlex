@@ -2411,10 +2411,26 @@ def mcp_call_api():
     return jsonify(mcp_call_tool(tool_name, body.get('arguments', {})))
 
 
+@app.route('/test_mcp', methods=['POST'])
+def test_mcp():
+    candidate_key = request.form.get('MCP_API_KEY', '').strip()
+    if os.environ.get('CLEANMYPLEX_MCP_API_KEY'):
+        candidate_key = MCP_API_KEY
+    protected = bool(candidate_key)
+    return jsonify({
+        'status': 'success',
+        'message': 'MCP protégé par clé Bearer.' if protected else 'MCP actif sans clé. À réserver à un réseau de confiance.',
+        'protected': protected,
+        'tools': len(MCP_TOOLS),
+        'discovery_url': url_for('mcp_discovery', _external=True),
+        'endpoint_url': url_for('mcp_streamable_http', _external=True),
+    })
+
+
 @app.route('/settings', methods=['GET', 'POST'])
 def settings():
     global PLEX_URL, PLEX_TOKEN, PLEX_USERNAME, PLEX_PASSWORD
-    global FRIEND_SERVER_NAME
+    global FRIEND_SERVER_NAME, MCP_API_KEY
 
     if request.method == 'POST':
         plex_url = request.form.get('PLEX_URL', '').strip()
@@ -2422,6 +2438,10 @@ def settings():
         plex_username = request.form.get('PLEX_USERNAME', '').strip()
         plex_password = request.form.get('PLEX_PASSWORD', '').strip()
         friend_server_name = request.form.get('friend_server_name', '').strip()
+        if os.environ.get('CLEANMYPLEX_MCP_API_KEY'):
+            mcp_api_key = config.get('MCP_API_KEY', '')
+        else:
+            mcp_api_key = request.form.get('MCP_API_KEY', '').strip()
 
         if not plex_token and not (plex_username and plex_password):
             flash('Renseignez soit un token Plex, soit un couple username/password.', 'warning')
@@ -2432,6 +2452,7 @@ def settings():
         config['PLEX_USERNAME'] = plex_username
         config['PLEX_PASSWORD'] = plex_password
         config['FRIEND_SERVER_NAME'] = friend_server_name
+        config['MCP_API_KEY'] = mcp_api_key
 
         with open('config.json', 'w') as config_file:
             json.dump(config, config_file, indent=4)
@@ -2441,6 +2462,7 @@ def settings():
         PLEX_USERNAME = config['PLEX_USERNAME']
         PLEX_PASSWORD = config['PLEX_PASSWORD']
         FRIEND_SERVER_NAME = config['FRIEND_SERVER_NAME']
+        MCP_API_KEY = os.environ.get('CLEANMYPLEX_MCP_API_KEY', config.get('MCP_API_KEY', ''))
 
         refresh_connections()
 
@@ -2464,6 +2486,8 @@ def settings():
     return render_template(
         'settings.html',
         config=config,
+        effective_mcp_api_key=MCP_API_KEY,
+        mcp_env_override=bool(os.environ.get('CLEANMYPLEX_MCP_API_KEY')),
         local_movie_libraries=get_library_sections(plex, 'movie') if plex else [],
         local_show_libraries=get_library_sections(plex, 'show') if plex else [],
         friend_server_names=get_friend_server_names()

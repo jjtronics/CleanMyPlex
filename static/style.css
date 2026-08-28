@@ -942,6 +942,10 @@ select[multiple] {
     line-height: 1.35;
 }
 
+.field-hint--warning {
+    color: #fde68a;
+}
+
 .form-action-bar {
     display: flex;
     flex-wrap: wrap;
@@ -1206,8 +1210,53 @@ select[multiple] {
 
 .input-action {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto auto;
     gap: 0.55rem;
+}
+
+.input-action--secret {
+    grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.secret-toggle {
+    min-width: 2.65rem;
+    padding-inline: 0.65rem;
+    line-height: 1;
+}
+
+.secret-toggle--visible {
+    border-color: rgba(56, 189, 248, 0.42);
+    background: rgba(56, 189, 248, 0.14);
+    color: #e0f2fe;
+}
+
+.mcp-endpoints {
+    display: grid;
+    gap: 0.55rem;
+    margin: 0.85rem 0;
+}
+
+.mcp-endpoints div {
+    display: grid;
+    gap: 0.18rem;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 8px;
+    background: rgba(8, 13, 24, 0.36);
+    padding: 0.62rem 0.72rem;
+}
+
+.mcp-endpoints span {
+    color: #67e8f9;
+    font-size: 0.66rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.mcp-endpoints code {
+    color: #dbeafe;
+    font-size: 0.78rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
 }
 
 .test-result,
