@@ -4,7 +4,7 @@
 
 {% block header_title %}Nettoyage{% endblock %}
 
-{% block header_subtitle %}Scanner les bibliothèques non vues, préparer les actions, puis traiter le CSV validé.{% endblock %}
+{% block header_subtitle %}Scanner les bibliothèques non vues, préparer les actions, puis lancer le traitement validé.{% endblock %}
 
 {% block content %}
     <form method="post" class="workflow-form">
@@ -14,7 +14,7 @@
                     <span class="workflow-card__icon">▣</span>
                     <div>
                         <h2>Films</h2>
-                        <p>Créer ou remplacer le CSV des films non vus.</p>
+                        <p>Créer ou remplacer les données des films non vus.</p>
                     </div>
                 </div>
                 <label for="library_names_films">Bibliothèques à scanner</label>
@@ -31,7 +31,7 @@
                     <span class="workflow-card__icon">▤</span>
                     <div>
                         <h2>Séries</h2>
-                        <p>Créer ou remplacer le CSV des séries non vues.</p>
+                        <p>Créer ou remplacer les données des séries non vues.</p>
                     </div>
                 </div>
                 <label for="library_names_series">Bibliothèques à scanner</label>
@@ -50,16 +50,16 @@
     </form>
 
     <div class="section-header">
-        <h2>CSV de nettoyage</h2>
+        <h2>Données de nettoyage</h2>
         <span>Ouvre le tableau pour filtrer, marquer et enregistrer les actions.</span>
     </div>
 
     <div class="dataset-list">
         <div class="dataset-row">
             <div>
-                <span class="dataset-card__label">unwatched_movies.csv</span>
+                <span class="dataset-card__label">Base de nettoyage</span>
                 <strong>Films non vus</strong>
-                <small>{% if films_csv_exists %}Dernière modification : {{ films_csv_mtime }}{% else %}Aucun CSV généré{% endif %}</small>
+                <small>{% if films_csv_exists %}Dernière mise à jour : {{ films_csv_mtime }}{% else %}Aucune donnée générée{% endif %}</small>
             </div>
             <div class="dataset-row__actions">
                 <span class="status-pill {% if films_csv_exists %}status-pill--ok{% else %}status-pill--muted{% endif %}">
@@ -77,9 +77,9 @@
 
         <div class="dataset-row">
             <div>
-                <span class="dataset-card__label">unwatched_series.csv</span>
+                <span class="dataset-card__label">Base de nettoyage</span>
                 <strong>Séries non vues</strong>
-                <small>{% if series_csv_exists %}Dernière modification : {{ series_csv_mtime }}{% else %}Aucun CSV généré{% endif %}</small>
+                <small>{% if series_csv_exists %}Dernière mise à jour : {{ series_csv_mtime }}{% else %}Aucune donnée générée{% endif %}</small>
             </div>
             <div class="dataset-row__actions">
                 <span class="status-pill {% if series_csv_exists %}status-pill--ok{% else %}status-pill--muted{% endif %}">

@@ -49,6 +49,12 @@ CSV_FILE_COMMON_SERIES = 'common_series.csv'
 SQLITE_DB_FILE = 'cleanmyplex.sqlite3'
 VALID_CSV_FILES = [CSV_FILE_FILMS, CSV_FILE_SERIES, CSV_FILE_COMMON_MOVIES, CSV_FILE_COMMON_SERIES]
 HIDDEN_CSV_COLUMNS = ['poster_url', 'summary', 'genres', 'directors', 'actors']
+DATASET_LABELS = {
+    CSV_FILE_FILMS: 'Films non vus',
+    CSV_FILE_SERIES: 'Séries non vues',
+    CSV_FILE_COMMON_MOVIES: 'Films communs',
+    CSV_FILE_COMMON_SERIES: 'Séries communes',
+}
 
 plex = None
 account = None
@@ -76,6 +82,10 @@ def get_pandas():
         import pandas as pandas
         pd = pandas
     return pd
+
+
+def dataset_label(csv_file):
+    return DATASET_LABELS.get(csv_file, csv_file)
 
 
 def is_missing_value(value):
@@ -1232,8 +1242,8 @@ def generate_csv(library_names, csv_file, media_type, task_id=None):
         with tasks_lock:
             update_task(
                 task_id,
-                message=f"Préparation du CSV {csv_file}.",
-                progress="Écriture CSV et index SQLite",
+                message=f"Préparation des données : {dataset_label(csv_file)}.",
+                progress="Enregistrement et indexation",
                 progress_percent=99
             )
 
@@ -1269,23 +1279,24 @@ def generate_csv(library_names, csv_file, media_type, task_id=None):
     return combined_df, csv_file
 
 
-# Fonction de génération de CSV en arrière-plan avec thread
+# Fonction de scan en arrière-plan avec thread
 def generate_csv_thread(library_names, csv_file, media_type, task_id):
     try:
         generate_csv(library_names, csv_file, media_type, task_id)
+        dataset_label = 'films' if media_type == 'movie' else 'séries'
         with tasks_lock:
             update_task(
                 task_id,
                 status='completed',
-                message=f"CSV {csv_file} généré avec succès.",
+                message=f"Scan des {dataset_label} terminé avec succès.",
                 progress='Terminé',
                 progress_percent=100
             )
-        print(f"CSV {csv_file} généré avec succès.")
+        print(f"Données {csv_file} générées avec succès.")
     except Exception as e:
         with tasks_lock:
-            update_task(task_id, status='failed', message=f"Erreur lors de la génération du CSV : {e}")
-        print(f"Erreur lors de la génération du CSV : {e}")
+            update_task(task_id, status='failed', message=f"Erreur pendant le scan : {e}")
+        print(f"Erreur pendant le scan : {e}")
 
 # Nouvelle fonction pour la suppression en tâche de fond
 def delete_items_from_csv_thread(csv_file, task_id):
@@ -1293,7 +1304,7 @@ def delete_items_from_csv_thread(csv_file, task_id):
         pd = get_pandas()
         if not os.path.exists(csv_file):
             with tasks_lock:
-                update_task(task_id, status='failed', message=f"Le fichier CSV {csv_file} n'existe pas.")
+                update_task(task_id, status='failed', message=f"Les données {dataset_label(csv_file)} sont introuvables.")
             return
 
         df = pd.read_csv(csv_file)
@@ -1387,8 +1398,9 @@ def compare_libraries_thread(local_library_names, friend_library_names, media_ty
     try:
         df, output_file, num_items, total_space_saved_gb = compare_libraries(local_library_names, friend_library_names, media_type)
         import_csv_to_sqlite(output_file, force=True)
+        dataset_label = 'films' if media_type == 'movie' else 'séries'
         with tasks_lock:
-            update_task(task_id, status='completed', message=f"CSV {output_file} généré avec succès.")
+            update_task(task_id, status='completed', message=f"Comparaison des {dataset_label} terminée avec succès.")
     except Exception as e:
         with tasks_lock:
             update_task(task_id, status='failed', message=f"Erreur lors de la comparaison des bibliothèques : {e}")
@@ -1526,11 +1538,11 @@ def delete_csv():
             with get_db_connection() as conn:
                 conn.execute('DELETE FROM csv_rows WHERE csv_file = ?', (csv_file,))
                 conn.execute('DELETE FROM csv_datasets WHERE csv_file = ?', (csv_file,))
-            flash(f"Fichier {csv_file} supprimé avec succès.", 'success')
+            flash(f"Données {dataset_label(csv_file)} supprimées avec succès.", 'success')
         else:
-            flash(f"Le fichier {csv_file} n'existe pas.", 'danger')
+            flash(f"Les données {dataset_label(csv_file)} sont introuvables.", 'danger')
     else:
-        flash(f"Le fichier {csv_file} spécifié est invalide.", 'danger')
+        flash(f"Le jeu de données {csv_file} est invalide.", 'danger')
     return redirect(url_for('index'))
 
 @app.route('/clean', methods=['GET', 'POST'])
@@ -1558,20 +1570,18 @@ def clean():
             media_type = 'movie'
             task_id = str(uuid4())
             with tasks_lock:
-                create_task(task_id, 'Scan films', 'La génération du CSV des films a démarré.', 'Initialisation...')
+                create_task(task_id, 'Scan films', 'Le scan des films a démarré.', 'Initialisation...')
             threading.Thread(target=generate_csv_thread, args=(selected_movie_libraries, csv_file, media_type, task_id)).start()
             tasks_list.append(task_id)
-            flash('La génération du CSV des films a démarré en arrière-plan.', 'info')
 
         if selected_series_libraries:
             csv_file = CSV_FILE_SERIES
             media_type = 'show'
             task_id = str(uuid4())
             with tasks_lock:
-                create_task(task_id, 'Scan séries', 'La génération du CSV des séries a démarré.', 'Initialisation...')
+                create_task(task_id, 'Scan séries', 'Le scan des séries a démarré.', 'Initialisation...')
             threading.Thread(target=generate_csv_thread, args=(selected_series_libraries, csv_file, media_type, task_id)).start()
             tasks_list.append(task_id)
-            flash('La génération du CSV des séries a démarré en arrière-plan.', 'info')
 
         return redirect(url_for('index', tasks=','.join(tasks_list)))
 
@@ -1625,7 +1635,6 @@ def duplicates():
                 create_task(task_id, 'Doublons films', 'La comparaison des films a démarré.', 'Initialisation...')
             threading.Thread(target=compare_libraries_thread, args=(selected_local_movie_libraries, selected_friend_movie_libraries, media_type, task_id)).start()
             tasks_list.append(task_id)
-            flash('La comparaison des films a démarré en arrière-plan.', 'info')
 
         if selected_local_series_libraries and selected_friend_series_libraries:
             media_type = 'show'
@@ -1634,7 +1643,6 @@ def duplicates():
                 create_task(task_id, 'Doublons séries', 'La comparaison des séries a démarré.', 'Initialisation...')
             threading.Thread(target=compare_libraries_thread, args=(selected_local_series_libraries, selected_friend_series_libraries, media_type, task_id)).start()
             tasks_list.append(task_id)
-            flash('La comparaison des séries a démarré en arrière-plan.', 'info')
 
         return redirect(url_for('index', tasks=','.join(tasks_list)))
 
@@ -1677,7 +1685,7 @@ def tasks_api():
 def view_csv(csv_file):
     dataset = get_sqlite_dataset(csv_file)
     if dataset is None:
-        flash('Le fichier CSV spécifié n\'existe pas.', 'danger')
+        flash('Le jeu de données demandé est introuvable.', 'danger')
         return redirect(url_for('index'))
 
     if request.method == 'POST':
@@ -1685,10 +1693,10 @@ def view_csv(csv_file):
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify({
                 'status': 'success',
-                'message': 'CSV mis à jour avec succès.',
+                'message': 'Modifications enregistrées avec succès.',
                 'updated': updated_count,
             })
-        flash('CSV mis à jour avec succès.', 'success')
+        flash('Modifications enregistrées avec succès.', 'success')
         return redirect(url_for('view_csv', csv_file=csv_file))
 
     columns = dataset['columns']
@@ -1700,6 +1708,7 @@ def view_csv(csv_file):
         row_count=dataset['row_count'],
         titles=columns,
         csv_file=csv_file,
+        dataset_label=dataset_label(csv_file),
         unique_libraries=unique_libraries,
         unique_actions=unique_actions
     )
@@ -1715,7 +1724,7 @@ def view_existing_csv(library):
     elif library == 'common_series':
         csv_file = CSV_FILE_COMMON_SERIES
     else:
-        flash("Bibliothèque CSV inconnue.", 'danger')
+        flash("Jeu de données inconnu.", 'danger')
         return redirect(url_for('index'))
 
     return redirect(url_for('view_csv', csv_file=csv_file))
@@ -1725,9 +1734,8 @@ def process_csv(csv_file):
     export_sqlite_to_csv(csv_file)
     task_id = str(uuid4())
     with tasks_lock:
-        create_task(task_id, 'Suppression CSV', 'La suppression a démarré.', '0%')
+        create_task(task_id, 'Suppression', 'La suppression a démarré.', '0%')
     threading.Thread(target=delete_items_from_csv_thread, args=(csv_file, task_id)).start()
-    flash('La suppression a démarré en arrière-plan.', 'info')
     return redirect(url_for('index', tasks=task_id))
 
 @app.route('/download/<path:csv_file>')

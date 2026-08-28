@@ -1,13 +1,12 @@
-<!-- templates/view_csv.html -->
 {% extends "base.html" %}
 
-{% block title %}CSV - {{ csv_file }}{% endblock %}
+{% block title %}Données - {{ dataset_label }}{% endblock %}
 
 {% block content %}
     <div class="csv-page">
         <div class="csv-page__header">
             <div>
-                <h2>CSV - {{ csv_file }}</h2>
+                <h2>{{ dataset_label }}</h2>
                 <p>{{ row_count }} éléments indexés</p>
             </div>
         </div>
@@ -119,11 +118,10 @@
             <div class="csv-save-status" id="csv-save-status" role="status" aria-live="polite"></div>
         </form>
 
-        <!-- Boutons "Télécharger le CSV" et "Traiter le CSV" -->
         <div class="action-buttons mt-3">
-            <a href="{{ url_for('download_csv', csv_file=csv_file) }}" class="btn btn-primary">Télécharger le CSV</a>
+            <a href="{{ url_for('download_csv', csv_file=csv_file) }}" class="btn btn-primary">Exporter en CSV</a>
             <form action="{{ url_for('process_csv', csv_file=csv_file) }}" method="post" class="inline-form">
-                <button type="submit" class="btn btn-warning">Traiter le CSV</button>
+                <button type="submit" class="btn btn-warning">Lancer la suppression</button>
             </form>
         </div>
     </div>
@@ -478,7 +476,7 @@
                 'actors': element.data('actors') || 'N/A'
             };
 
-            // Remplir le modal avec les données du CSV
+            // Remplir le modal avec les données de la ligne
             $('#itemInfoModalLabel').text(dataObj['title']);
             $('#itemSummary').text(dataObj['summary']);
             $('#itemYear').text(dataObj['release_date']);
@@ -524,7 +522,7 @@
                 setActionOnSelectedRows('D');
             });
         {% else %}
-            // Pour les autres CSV, archive et suppression
+            // Pour les données de nettoyage, archive et suppression
             $('#set_selected_a').on('click', function() {
                 setActionOnSelectedRows('A');
             });

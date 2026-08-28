@@ -20,12 +20,12 @@ CleanMyPlex est une application web permettant de gérer et nettoyer vos bibliot
 ## Fonctionnalités
 
 - Nettoyage de vos films/séries
-  - Génération de fichiers CSV des films et séries non visionnés selon des critères spécifiques.
-  - Visualisation et gestion des fichiers CSV générés.
+  - Scan des films et séries non visionnés selon des critères spécifiques.
+  - Visualisation et gestion des données indexées en SQLite, avec export CSV si besoin.
   - Archivage ou suppression des éléments directement depuis l’interface web.
 - Vérification des doublons entre serveurs Plex
   - Comparaison des bibliothèques de films et séries entre deux serveurs Plex.
-  - Génération de fichiers CSV des éléments en commun.
+  - Indexation des éléments en commun.
   - Calcul de l’espace disque pouvant être libéré en supprimant les doublons.
 - Gestion des utilisateurs
   - Liste les users, leurs adresse email etc ...

@@ -72,16 +72,16 @@
     </form>
 
     <div class="section-header">
-        <h2>CSV de doublons</h2>
+        <h2>Résultats de doublons</h2>
         <span>Les suppressions restent locales, jamais sur le serveur ami.</span>
     </div>
 
     <div class="dataset-list">
         <div class="dataset-row">
             <div>
-                <span class="dataset-card__label">common_movies.csv</span>
+                <span class="dataset-card__label">Résultat de comparaison</span>
                 <strong>Films communs</strong>
-                <small>{% if common_movies_csv_exists %}Dernière modification : {{ common_movies_csv_mtime }}{% else %}Aucun CSV généré{% endif %}</small>
+                <small>{% if common_movies_csv_exists %}Dernière mise à jour : {{ common_movies_csv_mtime }}{% else %}Aucune donnée générée{% endif %}</small>
             </div>
             <div class="dataset-row__actions">
                 <span class="status-pill {% if common_movies_csv_exists %}status-pill--ok{% else %}status-pill--muted{% endif %}">
@@ -99,9 +99,9 @@
 
         <div class="dataset-row">
             <div>
-                <span class="dataset-card__label">common_series.csv</span>
+                <span class="dataset-card__label">Résultat de comparaison</span>
                 <strong>Séries communes</strong>
-                <small>{% if common_series_csv_exists %}Dernière modification : {{ common_series_csv_mtime }}{% else %}Aucun CSV généré{% endif %}</small>
+                <small>{% if common_series_csv_exists %}Dernière mise à jour : {{ common_series_csv_mtime }}{% else %}Aucune donnée générée{% endif %}</small>
             </div>
             <div class="dataset-row__actions">
                 <span class="status-pill {% if common_series_csv_exists %}status-pill--ok{% else %}status-pill--muted{% endif %}">
