@@ -3,5 +3,6 @@
  "PLEX_TOKEN": "your_plex_token",
  "PLEX_USERNAME": "your_plex_username",
  "PLEX_PASSWORD": "your_plex_password",
- "FRIEND_SERVER_NAME": "FriendServerName"
+ "FRIEND_SERVER_NAME": "FriendServerName",
+ "MCP_API_KEY": ""
 }

@@ -8,6 +8,7 @@ CleanMyPlex est une application web permettant de gérer et nettoyer vos bibliot
 - [Fonctionnalités](#fonctionnalités)
 - [Prérequis](#prérequis)
 - [Installation](#installation)
+- [MCP](#mcp)
 - [Mise à jour](#mise-à-jour)
 - [Scripts Systemd](#scripts-systemd)
 - [Contribution](#contribution)
@@ -32,6 +33,8 @@ CleanMyPlex est une application web permettant de gérer et nettoyer vos bibliot
 - Configuration des paramètres
   - Interface web pour configurer les paramètres de l’application.
   - Mise à jour des informations de connexion au serveur Plex et des critères de nettoyage.
+- MCP pour assistants IA
+  - Exposition d’un serveur MCP HTTP pour lancer les scans, consulter les datasets, marquer les actions et suivre les jobs.
 
 ## Prérequis
 
@@ -65,7 +68,8 @@ CleanMyPlex est une application web permettant de gérer et nettoyer vos bibliot
     "PLEX_TOKEN": "your_plex_token",
     "PLEX_USERNAME": "your_plex_username",
     "PLEX_PASSWORD": "your_plex_password",
-    "FRIEND_SERVER_NAME": "FriendServerName"
+    "FRIEND_SERVER_NAME": "FriendServerName",
+    "MCP_API_KEY": ""
    }
 
 5. Créer un Utilisateur Basique Sans Home Directory ni Password :
@@ -75,6 +79,35 @@ CleanMyPlex est une application web permettant de gérer et nettoyer vos bibliot
 6. Changer le Propriétaire du Répertoire du Projet :
    ```sh
    sudo chown -R cleanmyplex:cleanmyplex /opt/cleanmyplex
+
+## MCP
+
+CleanMyPlex expose un serveur MCP HTTP intégré à Flask :
+
+- Découverte : `GET /.well-known/mcp`
+- MCP streamable HTTP : `POST /mcp`
+- Compatibilité API : `POST /api/mcp/initialize`, `GET /api/mcp/tools`, `POST /api/mcp/call`
+
+Configurez `MCP_API_KEY` dans `config.json` ou `CLEANMYPLEX_MCP_API_KEY` dans l’environnement systemd. Si la valeur est vide, le MCP reste ouvert sur le réseau qui expose CleanMyPlex. Les clients MCP authentifiés doivent envoyer :
+
+```sh
+Authorization: Bearer votre_cle_mcp
+```
+
+Exemple :
+
+```sh
+curl -H "Authorization: Bearer votre_cle_mcp" http://127.0.0.1:5000/.well-known/mcp
+
+curl -H "Authorization: Bearer votre_cle_mcp" http://127.0.0.1:5000/api/mcp/tools
+
+curl -X POST http://127.0.0.1:5000/api/mcp/call \
+  -H "Authorization: Bearer votre_cle_mcp" \
+  -H "Content-Type: application/json" \
+  -d '{"toolName":"cleanmyplex_status","arguments":{}}'
+```
+
+Outils disponibles : `cleanmyplex_status`, `list_libraries`, `list_datasets`, `query_dataset`, `set_dataset_actions`, `start_unwatched_scan`, `start_duplicate_scan`, `start_delete_marked_items`, `list_jobs`, `list_users`.
 
 ## Mise à jour
 

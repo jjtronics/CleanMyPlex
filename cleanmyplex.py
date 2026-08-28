@@ -8,6 +8,7 @@ import re
 import sqlite3
 import threading
 import time
+from hmac import compare_digest
 from urllib.parse import urljoin
 from html import escape
 from uuid import uuid4
@@ -22,7 +23,8 @@ def load_config():
         'PLEX_TOKEN': '',
         'PLEX_USERNAME': '',
         'PLEX_PASSWORD': '',
-        'FRIEND_SERVER_NAME': ''
+        'FRIEND_SERVER_NAME': '',
+        'MCP_API_KEY': ''
     }
 
     config_paths = ['config.json', 'config.json.example']
@@ -42,6 +44,7 @@ PLEX_TOKEN = config.get('PLEX_TOKEN', '')
 PLEX_USERNAME = config.get('PLEX_USERNAME', '')
 PLEX_PASSWORD = config.get('PLEX_PASSWORD', '')
 FRIEND_SERVER_NAME = config.get('FRIEND_SERVER_NAME', '')
+MCP_API_KEY = os.environ.get('CLEANMYPLEX_MCP_API_KEY', config.get('MCP_API_KEY', ''))
 CSV_FILE_FILMS = 'unwatched_movies.csv'
 CSV_FILE_SERIES = 'unwatched_series.csv'
 CSV_FILE_COMMON_MOVIES = 'common_movies.csv'
@@ -86,6 +89,34 @@ def get_pandas():
 
 def dataset_label(csv_file):
     return DATASET_LABELS.get(csv_file, csv_file)
+
+
+def dataset_key(csv_file):
+    keys = {
+        CSV_FILE_FILMS: 'unwatched_movies',
+        CSV_FILE_SERIES: 'unwatched_series',
+        CSV_FILE_COMMON_MOVIES: 'common_movies',
+        CSV_FILE_COMMON_SERIES: 'common_series',
+    }
+    return keys.get(csv_file, csv_file)
+
+
+def resolve_dataset_file(value):
+    dataset_aliases = {
+        'films': CSV_FILE_FILMS,
+        'movies': CSV_FILE_FILMS,
+        'unwatched_movies': CSV_FILE_FILMS,
+        CSV_FILE_FILMS: CSV_FILE_FILMS,
+        'series': CSV_FILE_SERIES,
+        'shows': CSV_FILE_SERIES,
+        'unwatched_series': CSV_FILE_SERIES,
+        CSV_FILE_SERIES: CSV_FILE_SERIES,
+        'common_movies': CSV_FILE_COMMON_MOVIES,
+        CSV_FILE_COMMON_MOVIES: CSV_FILE_COMMON_MOVIES,
+        'common_series': CSV_FILE_COMMON_SERIES,
+        CSV_FILE_COMMON_SERIES: CSV_FILE_COMMON_SERIES,
+    }
+    return dataset_aliases.get(str(value or '').strip())
 
 
 def is_missing_value(value):
@@ -1742,6 +1773,643 @@ def process_csv(csv_file):
 def download_csv(csv_file):
     export_sqlite_to_csv(csv_file)
     return send_from_directory(directory=os.getcwd(), path=csv_file, as_attachment=True)
+
+
+MCP_PROTOCOL_VERSION = '2025-06-18'
+MCP_LEGACY_PROTOCOL_VERSION = '2024-11-05'
+JSON_RPC_ERROR_CODES = {
+    'INVALID_REQUEST': -32600,
+    'METHOD_NOT_FOUND': -32601,
+    'INVALID_PARAMS': -32602,
+    'INTERNAL_ERROR': -32603,
+}
+
+
+def mcp_json_schema(properties=None, required=None):
+    return {
+        'type': 'object',
+        'properties': properties or {},
+        'required': required or [],
+        'additionalProperties': False,
+    }
+
+
+MCP_TOOLS = [
+    {
+        'name': 'cleanmyplex_status',
+        'category': 'system',
+        'description': 'Retourne l’état Plex, les datasets disponibles et les jobs actifs.',
+        'inputSchema': mcp_json_schema(),
+    },
+    {
+        'name': 'list_libraries',
+        'category': 'plex',
+        'description': 'Liste les bibliothèques Plex locales utilisables pour les scans.',
+        'inputSchema': mcp_json_schema(),
+    },
+    {
+        'name': 'list_datasets',
+        'category': 'cleaning',
+        'description': 'Liste les jeux de données CleanMyPlex indexés en SQLite avec compteurs.',
+        'inputSchema': mcp_json_schema(),
+    },
+    {
+        'name': 'query_dataset',
+        'category': 'cleaning',
+        'description': 'Recherche dans un jeu de données avec filtres de colonnes, tri et pagination.',
+        'inputSchema': mcp_json_schema({
+            'dataset': {'type': 'string', 'description': 'films, series, common_movies, common_series ou nom fichier historique.'},
+            'search': {'type': 'string'},
+            'filters': {'type': 'object', 'additionalProperties': {'type': 'string'}},
+            'action': {'type': 'string', 'enum': ['', 'A', 'D']},
+            'limit': {'type': 'integer', 'minimum': 1, 'maximum': 100},
+            'offset': {'type': 'integer', 'minimum': 0},
+            'order_by': {'type': 'string'},
+            'order_dir': {'type': 'string', 'enum': ['asc', 'desc']},
+        }, ['dataset']),
+    },
+    {
+        'name': 'set_dataset_actions',
+        'category': 'cleaning',
+        'description': 'Marque des lignes en archive (A), suppression (D) ou vide l’action. Ne supprime aucun média Plex.',
+        'inputSchema': mcp_json_schema({
+            'dataset': {'type': 'string'},
+            'action': {'type': 'string', 'enum': ['', 'A', 'D']},
+            'row_ids': {'type': 'array', 'items': {'type': 'integer'}},
+            'rating_keys': {'type': 'array', 'items': {'type': 'string'}},
+            'title_contains': {'type': 'string'},
+            'dry_run': {'type': 'boolean'},
+        }, ['dataset', 'action']),
+    },
+    {
+        'name': 'start_unwatched_scan',
+        'category': 'jobs',
+        'description': 'Lance un scan des films et/ou séries non vus en arrière-plan.',
+        'inputSchema': mcp_json_schema({
+            'media_type': {'type': 'string', 'enum': ['movie', 'show', 'both']},
+            'libraries': {'type': 'array', 'items': {'type': 'string'}, 'description': 'Par défaut: ALL.'},
+        }, ['media_type']),
+    },
+    {
+        'name': 'start_duplicate_scan',
+        'category': 'jobs',
+        'description': 'Lance une comparaison de doublons avec le serveur ami configuré.',
+        'inputSchema': mcp_json_schema({
+            'media_type': {'type': 'string', 'enum': ['movie', 'show', 'both']},
+            'local_libraries': {'type': 'array', 'items': {'type': 'string'}, 'description': 'Par défaut: ALL.'},
+            'friend_libraries': {'type': 'array', 'items': {'type': 'string'}, 'description': 'Par défaut: ALL.'},
+        }, ['media_type']),
+    },
+    {
+        'name': 'start_delete_marked_items',
+        'category': 'jobs',
+        'description': 'Lance la suppression Plex des éléments marqués D dans un dataset. Action destructive.',
+        'inputSchema': mcp_json_schema({
+            'dataset': {'type': 'string'},
+        }, ['dataset']),
+        'destructive': True,
+    },
+    {
+        'name': 'list_jobs',
+        'category': 'jobs',
+        'description': 'Liste les jobs récents et leur progression.',
+        'inputSchema': mcp_json_schema({
+            'limit': {'type': 'integer', 'minimum': 1, 'maximum': 30},
+        }),
+    },
+    {
+        'name': 'list_users',
+        'category': 'plex',
+        'description': 'Liste les utilisateurs Plex partagés avec leur activité courante quand disponible.',
+        'inputSchema': mcp_json_schema(),
+    },
+]
+
+
+def mcp_success(data):
+    return {'success': True, 'data': data}
+
+
+def mcp_error(message, error_code='INTERNAL_ERROR'):
+    return {'success': False, 'error': message, 'errorCode': error_code}
+
+
+def mcp_create_jsonrpc_result(request_id, result):
+    return {'jsonrpc': '2.0', 'id': request_id if request_id is not None else None, 'result': result}
+
+
+def mcp_create_jsonrpc_error(request_id, code, message, data=None):
+    payload = {'jsonrpc': '2.0', 'id': request_id if request_id is not None else None, 'error': {'code': code, 'message': message}}
+    if data is not None:
+        payload['error']['data'] = data
+    return payload
+
+
+def mcp_tool_result_for_protocol(result):
+    if not result.get('success'):
+        return {
+            'content': [{'type': 'text', 'text': result.get('error', 'Tool call failed')}],
+            'isError': True,
+            'structuredContent': {
+                'error': result.get('error'),
+                'errorCode': result.get('errorCode'),
+            },
+        }
+
+    data = result.get('data')
+    return {
+        'content': [{'type': 'text', 'text': data if isinstance(data, str) else json.dumps(data, ensure_ascii=False, indent=2)}],
+        'isError': False,
+        'structuredContent': data,
+    }
+
+
+def mcp_is_authorized():
+    if not MCP_API_KEY:
+        return True
+
+    auth_header = request.headers.get('Authorization', '')
+    token = ''
+    if auth_header.startswith('Bearer '):
+        token = auth_header.split(' ', 1)[1].strip()
+    token = token or request.headers.get('X-CleanMyPlex-MCP-Key', '').strip()
+    return bool(token) and compare_digest(token, MCP_API_KEY)
+
+
+def mcp_require_auth():
+    if mcp_is_authorized():
+        return None
+    return jsonify({'error': 'Unauthorized'}), 401
+
+
+def mcp_tool_info(tool):
+    return {
+        'name': tool['name'],
+        'title': tool['name'],
+        'category': tool['category'],
+        'description': tool['description'],
+        'inputSchema': tool['inputSchema'],
+        **({'destructive': True} if tool.get('destructive') else {}),
+    }
+
+
+def mcp_dataset_summary(csv_file):
+    summary = {
+        'key': dataset_key(csv_file),
+        'label': dataset_label(csv_file),
+        'file': csv_file,
+        'exists': os.path.exists(csv_file),
+        'row_count': 0,
+        'actions': {'archive': 0, 'delete': 0, 'none': 0},
+        'updated_at': time.ctime(os.path.getmtime(csv_file)) if os.path.exists(csv_file) else None,
+    }
+    dataset = get_sqlite_dataset(csv_file)
+    if dataset is None:
+        return summary
+
+    summary['row_count'] = dataset['row_count']
+    with get_db_connection() as conn:
+        rows = conn.execute(
+            '''
+            SELECT COALESCE(action, '') AS action, COUNT(*) AS count
+            FROM csv_rows
+            WHERE csv_file = ?
+            GROUP BY COALESCE(action, '')
+            ''',
+            (csv_file,)
+        ).fetchall()
+
+    for row in rows:
+        action = row['action']
+        if action == 'A':
+            summary['actions']['archive'] = row['count']
+        elif action == 'D':
+            summary['actions']['delete'] = row['count']
+        else:
+            summary['actions']['none'] += row['count']
+    return summary
+
+
+def mcp_safe_dataset_summary(csv_file):
+    try:
+        return mcp_dataset_summary(csv_file)
+    except Exception as e:
+        return {
+            'key': dataset_key(csv_file),
+            'label': dataset_label(csv_file),
+            'file': csv_file,
+            'exists': os.path.exists(csv_file),
+            'row_count': 0,
+            'actions': {'archive': 0, 'delete': 0, 'none': 0},
+            'updated_at': time.ctime(os.path.getmtime(csv_file)) if os.path.exists(csv_file) else None,
+            'error': str(e),
+        }
+
+
+def mcp_status(_args):
+    plex_available, plex_error = probe_plex_server()
+    with tasks_lock:
+        active_tasks = [serialize_task(task) for task in tasks.values() if task.get('status') == 'running']
+
+    return mcp_success({
+        'plex': {
+            'connected': plex_available,
+            'error': plex_error,
+            'connection_refreshing': connection_status['refreshing'],
+            'configured_url': bool(PLEX_URL),
+            'configured_token': bool(PLEX_TOKEN),
+        },
+        'account': {
+            'connected': account is not None,
+            'configured': connection_status['account_configured'],
+            'error': connection_status['account_error'],
+        },
+        'datasets': [mcp_safe_dataset_summary(csv_file) for csv_file in VALID_CSV_FILES],
+        'active_jobs': active_tasks,
+    })
+
+
+def mcp_list_libraries(_args):
+    if plex is None:
+        return mcp_error('Connexion au serveur Plex indisponible.', 'PLEX_UNAVAILABLE')
+    return mcp_success({
+        'movie': get_library_sections(plex, 'movie'),
+        'show': get_library_sections(plex, 'show'),
+    })
+
+
+def mcp_list_datasets(_args):
+    return mcp_success({'datasets': [mcp_safe_dataset_summary(csv_file) for csv_file in VALID_CSV_FILES]})
+
+
+def mcp_query_dataset(args):
+    csv_file = resolve_dataset_file(args.get('dataset'))
+    if not csv_file:
+        return mcp_error('Dataset inconnu.', 'INVALID_INPUT')
+
+    dataset = get_sqlite_dataset(csv_file)
+    if dataset is None:
+        return mcp_error('Dataset introuvable. Lance un scan avant de requêter ces données.', 'NOT_FOUND')
+
+    columns = dataset['columns']
+    visible_columns = [column for column in columns if column not in HIDDEN_CSV_COLUMNS]
+    limit = min(max(int(args.get('limit', 30)), 1), 100)
+    offset = max(int(args.get('offset', 0)), 0)
+    filters = args.get('filters') if isinstance(args.get('filters'), dict) else {}
+
+    where_clauses = ['csv_file = ?']
+    params = [csv_file]
+
+    search = str(args.get('search', '') or '').strip()
+    if search:
+        search_clauses = []
+        for column_name in visible_columns:
+            sql_column = SQL_COLUMN_BY_CSV_COLUMN.get(column_name)
+            if sql_column:
+                search_clauses.append(f'LOWER(COALESCE(CAST({sql_column} AS TEXT), "")) LIKE ?')
+                params.append(f'%{search.lower()}%')
+            else:
+                search_clauses.append('LOWER(COALESCE(CAST(json_extract(data_json, ?) AS TEXT), "")) LIKE ?')
+                params.extend((f'$.{column_name}', f'%{search.lower()}%'))
+        if search_clauses:
+            where_clauses.append(f"({' OR '.join(search_clauses)})")
+
+    for column_name, value in filters.items():
+        if column_name in visible_columns:
+            add_column_filter(where_clauses, params, column_name, str(value))
+
+    action = args.get('action')
+    if action in ['', 'A', 'D']:
+        where_clauses.append('COALESCE(action, "") = ?')
+        params.append(action)
+
+    order_by = str(args.get('order_by') or 'row_index')
+    order_dir = 'DESC' if args.get('order_dir') == 'desc' else 'ASC'
+    if order_by == 'row_index':
+        order_clause = f'row_index {order_dir}'
+    elif order_by in visible_columns and order_by in SQL_COLUMN_BY_CSV_COLUMN:
+        order_clause = f'{SQL_COLUMN_BY_CSV_COLUMN[order_by]} {order_dir}, row_index ASC'
+    else:
+        order_clause = 'row_index ASC'
+
+    where_clause = ' AND '.join(where_clauses)
+    with get_db_connection() as conn:
+        total = conn.execute('SELECT COUNT(*) AS count FROM csv_rows WHERE csv_file = ?', (csv_file,)).fetchone()['count']
+        filtered = conn.execute(f'SELECT COUNT(*) AS count FROM csv_rows WHERE {where_clause}', params).fetchone()['count']
+        rows = conn.execute(
+            f'SELECT id, row_index, data_json FROM csv_rows WHERE {where_clause} ORDER BY {order_clause} LIMIT ? OFFSET ?',
+            params + [limit, offset]
+        ).fetchall()
+
+    return mcp_success({
+        'dataset': {'key': dataset_key(csv_file), 'label': dataset_label(csv_file), 'file': csv_file},
+        'total': total,
+        'filtered': filtered,
+        'limit': limit,
+        'offset': offset,
+        'rows': [
+            {
+                'row_id': row['id'],
+                'row_index': row['row_index'],
+                'data': json.loads(row['data_json']),
+            }
+            for row in rows
+        ],
+    })
+
+
+def mcp_set_dataset_actions(args):
+    csv_file = resolve_dataset_file(args.get('dataset'))
+    if not csv_file:
+        return mcp_error('Dataset inconnu.', 'INVALID_INPUT')
+
+    action = args.get('action')
+    if action not in ['', 'A', 'D']:
+        return mcp_error("Action invalide. Utilise '', 'A' ou 'D'.", 'INVALID_INPUT')
+    if csv_file in [CSV_FILE_COMMON_MOVIES, CSV_FILE_COMMON_SERIES] and action == 'A':
+        return mcp_error('Les datasets de doublons acceptent uniquement la suppression locale (D) ou une action vide.', 'INVALID_INPUT')
+
+    dataset = get_sqlite_dataset(csv_file)
+    if dataset is None:
+        return mcp_error('Dataset introuvable.', 'NOT_FOUND')
+
+    row_ids = args.get('row_ids') if isinstance(args.get('row_ids'), list) else []
+    rating_keys = [str(value) for value in args.get('rating_keys', [])] if isinstance(args.get('rating_keys'), list) else []
+    title_contains = str(args.get('title_contains') or '').strip()
+    dry_run = bool(args.get('dry_run', False))
+
+    where_clauses = ['csv_file = ?']
+    params = [csv_file]
+    if row_ids:
+        clean_row_ids = [int(row_id) for row_id in row_ids]
+        where_clauses.append(f"id IN ({','.join(['?'] * len(clean_row_ids))})")
+        params.extend(clean_row_ids)
+    if rating_keys:
+        where_clauses.append(f"rating_key IN ({','.join(['?'] * len(rating_keys))})")
+        params.extend(rating_keys)
+    if title_contains:
+        where_clauses.append('LOWER(COALESCE(title, "")) LIKE ?')
+        params.append(f'%{title_contains.lower()}%')
+    if len(where_clauses) == 1:
+        return mcp_error('Ajoute au moins row_ids, rating_keys ou title_contains pour éviter une modification globale accidentelle.', 'INVALID_INPUT')
+
+    where_clause = ' AND '.join(where_clauses)
+    with get_db_connection() as conn:
+        rows = conn.execute(
+            f'SELECT id, title, rating_key, data_json FROM csv_rows WHERE {where_clause} ORDER BY row_index ASC LIMIT 500',
+            params
+        ).fetchall()
+        if not dry_run:
+            for row in rows:
+                data = json.loads(row['data_json'])
+                data['Action'] = action
+                conn.execute(
+                    'UPDATE csv_rows SET data_json = ?, action = ? WHERE id = ? AND csv_file = ?',
+                    (json.dumps(data, ensure_ascii=False), action, row['id'], csv_file)
+                )
+
+    if not dry_run and rows:
+        export_sqlite_to_csv(csv_file)
+
+    return mcp_success({
+        'dataset': dataset_label(csv_file),
+        'action': action,
+        'dry_run': dry_run,
+        'matched': len(rows),
+        'updated': 0 if dry_run else len(rows),
+        'rows': [{'row_id': row['id'], 'title': row['title'], 'ratingKey': row['rating_key']} for row in rows],
+    })
+
+
+def mcp_start_unwatched_scan(args):
+    if plex is None:
+        return mcp_error('Connexion au serveur Plex indisponible.', 'PLEX_UNAVAILABLE')
+
+    media_type = args.get('media_type')
+    if media_type not in ['movie', 'show', 'both']:
+        return mcp_error("media_type doit être 'movie', 'show' ou 'both'.", 'INVALID_INPUT')
+    libraries = args.get('libraries') if isinstance(args.get('libraries'), list) and args.get('libraries') else ['ALL']
+    launches = []
+    for selected_media_type, csv_file, task_type, message in [
+        ('movie', CSV_FILE_FILMS, 'Scan films', 'Le scan des films a démarré.'),
+        ('show', CSV_FILE_SERIES, 'Scan séries', 'Le scan des séries a démarré.'),
+    ]:
+        if media_type not in [selected_media_type, 'both']:
+            continue
+        task_id = str(uuid4())
+        with tasks_lock:
+            create_task(task_id, task_type, message, 'Initialisation...')
+        threading.Thread(target=generate_csv_thread, args=(libraries, csv_file, selected_media_type, task_id), daemon=True).start()
+        launches.append({'task_id': task_id, 'type': task_type, 'dataset': dataset_label(csv_file), 'libraries': libraries})
+
+    return mcp_success({'launched': launches})
+
+
+def mcp_start_duplicate_scan(args):
+    if plex is None or account is None:
+        return mcp_error('Connexion Plex ou compte Plex indisponible.', 'PLEX_UNAVAILABLE')
+
+    media_type = args.get('media_type')
+    if media_type not in ['movie', 'show', 'both']:
+        return mcp_error("media_type doit être 'movie', 'show' ou 'both'.", 'INVALID_INPUT')
+    local_libraries = args.get('local_libraries') if isinstance(args.get('local_libraries'), list) and args.get('local_libraries') else ['ALL']
+    friend_libraries = args.get('friend_libraries') if isinstance(args.get('friend_libraries'), list) and args.get('friend_libraries') else ['ALL']
+    launches = []
+    for selected_media_type, task_type, message in [
+        ('movie', 'Doublons films', 'La comparaison des films a démarré.'),
+        ('show', 'Doublons séries', 'La comparaison des séries a démarré.'),
+    ]:
+        if media_type not in [selected_media_type, 'both']:
+            continue
+        task_id = str(uuid4())
+        with tasks_lock:
+            create_task(task_id, task_type, message, 'Initialisation...')
+        threading.Thread(
+            target=compare_libraries_thread,
+            args=(local_libraries, friend_libraries, selected_media_type, task_id),
+            daemon=True
+        ).start()
+        launches.append({'task_id': task_id, 'type': task_type, 'local_libraries': local_libraries, 'friend_libraries': friend_libraries})
+
+    return mcp_success({'launched': launches})
+
+
+def mcp_start_delete_marked_items(args):
+    if plex is None:
+        return mcp_error('Connexion au serveur Plex indisponible.', 'PLEX_UNAVAILABLE')
+    csv_file = resolve_dataset_file(args.get('dataset'))
+    if not csv_file:
+        return mcp_error('Dataset inconnu.', 'INVALID_INPUT')
+    if not export_sqlite_to_csv(csv_file):
+        return mcp_error('Dataset introuvable.', 'NOT_FOUND')
+
+    task_id = str(uuid4())
+    with tasks_lock:
+        create_task(task_id, 'Suppression', f'Suppression des éléments marqués D : {dataset_label(csv_file)}.', '0%')
+    threading.Thread(target=delete_items_from_csv_thread, args=(csv_file, task_id), daemon=True).start()
+    return mcp_success({'task_id': task_id, 'dataset': dataset_label(csv_file)})
+
+
+def mcp_list_jobs(args):
+    limit = min(max(int(args.get('limit', 30)), 1), 30)
+    with tasks_lock:
+        task_list = sorted(
+            (serialize_task(task) for task in tasks.values()),
+            key=lambda task: task.get('created_at') or '',
+            reverse=True
+        )
+    return mcp_success({'jobs': task_list[:limit], 'active_count': sum(1 for task in task_list if task['status'] == 'running')})
+
+
+def mcp_list_users(_args):
+    if account is None:
+        return mcp_error('Connexion au compte Plex indisponible.', 'PLEX_ACCOUNT_UNAVAILABLE')
+    try:
+        sessions = get_active_sessions() if plex else []
+        users = []
+        for user in account.users():
+            session_info = next((session for session in sessions if session['username'] == user.username), None)
+            users.append({
+                'username': user.username,
+                'email': safe_user_attr(user, 'email'),
+                'title': safe_user_attr(user, 'title'),
+                'userID': safe_user_attr(user, 'id'),
+                'homeUser': bool(safe_user_attr(user, 'home', default=False)),
+                'active': bool(session_info),
+                'session': session_info,
+            })
+        return mcp_success({'users': users, 'count': len(users)})
+    except Exception as e:
+        return mcp_error(str(e))
+
+
+MCP_HANDLERS = {
+    'cleanmyplex_status': mcp_status,
+    'list_libraries': mcp_list_libraries,
+    'list_datasets': mcp_list_datasets,
+    'query_dataset': mcp_query_dataset,
+    'set_dataset_actions': mcp_set_dataset_actions,
+    'start_unwatched_scan': mcp_start_unwatched_scan,
+    'start_duplicate_scan': mcp_start_duplicate_scan,
+    'start_delete_marked_items': mcp_start_delete_marked_items,
+    'list_jobs': mcp_list_jobs,
+    'list_users': mcp_list_users,
+}
+
+
+def mcp_call_tool(tool_name, tool_args):
+    handler = MCP_HANDLERS.get(tool_name)
+    if not handler:
+        return mcp_error(f'Outil MCP inconnu : {tool_name}', 'NOT_FOUND')
+    try:
+        return handler(tool_args if isinstance(tool_args, dict) else {})
+    except Exception as e:
+        app.logger.exception("Erreur MCP pendant l'appel %s", tool_name)
+        return mcp_error(str(e))
+
+
+@app.route('/.well-known/mcp')
+def mcp_discovery():
+    return jsonify({
+        'name': 'CleanMyPlex MCP',
+        'version': '1.0.0',
+        'protocolVersion': MCP_PROTOCOL_VERSION,
+        'capabilities': {'tools': {'listChanged': False}},
+        'transport': {'type': 'streamable-http', 'endpoint': '/mcp'},
+        'authentication': {'type': 'bearer' if MCP_API_KEY else 'none'},
+        'homepage': 'https://github.com/jjtronics/CleanMyPlex',
+    })
+
+
+@app.route('/mcp', methods=['GET'])
+def mcp_sse():
+    auth_error = mcp_require_auth()
+    if auth_error:
+        return auth_error
+    if 'text/event-stream' not in request.headers.get('Accept', ''):
+        return jsonify(mcp_create_jsonrpc_error(None, JSON_RPC_ERROR_CODES['INVALID_REQUEST'], 'GET /mcp requires Accept: text/event-stream.')), 406
+
+    payload = {
+        'jsonrpc': '2.0',
+        'method': 'notifications/message',
+        'params': {'level': 'info', 'logger': 'cleanmyplex', 'data': 'CleanMyPlex MCP SSE stream established.'},
+    }
+    return Response(f"event: message\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n", mimetype='text/event-stream')
+
+
+@app.route('/mcp', methods=['POST'])
+def mcp_streamable_http():
+    auth_error = mcp_require_auth()
+    if auth_error:
+        return auth_error
+
+    body = request.get_json(silent=True) or {}
+    request_id = body.get('id')
+    method = body.get('method')
+    if body.get('jsonrpc') != '2.0' or not method:
+        return jsonify(mcp_create_jsonrpc_error(request_id, JSON_RPC_ERROR_CODES['INVALID_REQUEST'], 'Invalid JSON-RPC request.')), 400
+    if request_id is None:
+        return '', 202
+
+    if method == 'initialize':
+        params = body.get('params') if isinstance(body.get('params'), dict) else {}
+        requested_protocol = params.get('protocolVersion', MCP_PROTOCOL_VERSION)
+        protocol_version = MCP_LEGACY_PROTOCOL_VERSION if requested_protocol == MCP_LEGACY_PROTOCOL_VERSION else MCP_PROTOCOL_VERSION
+        return jsonify(mcp_create_jsonrpc_result(request_id, {
+            'protocolVersion': protocol_version,
+            'capabilities': {'tools': {'listChanged': False}},
+            'serverInfo': {'name': 'CleanMyPlex', 'title': 'CleanMyPlex MCP', 'version': '1.0.0'},
+            'instructions': 'Use tools/list to inspect CleanMyPlex tools and tools/call to manage scans, datasets and marked cleanups.',
+        }))
+    if method == 'ping':
+        return jsonify(mcp_create_jsonrpc_result(request_id, {}))
+    if method == 'tools/list':
+        return jsonify(mcp_create_jsonrpc_result(request_id, {'tools': [mcp_tool_info(tool) for tool in MCP_TOOLS]}))
+    if method == 'tools/call':
+        params = body.get('params') if isinstance(body.get('params'), dict) else {}
+        tool_name = params.get('name')
+        if not tool_name:
+            return jsonify(mcp_create_jsonrpc_error(request_id, JSON_RPC_ERROR_CODES['INVALID_PARAMS'], 'tools/call requires params.name.')), 400
+        result = mcp_call_tool(tool_name, params.get('arguments', {}))
+        return jsonify(mcp_create_jsonrpc_result(request_id, mcp_tool_result_for_protocol(result)))
+
+    return jsonify(mcp_create_jsonrpc_error(request_id, JSON_RPC_ERROR_CODES['METHOD_NOT_FOUND'], f'Method not found: {method}')), 404
+
+
+@app.route('/api/mcp/initialize', methods=['POST'])
+def mcp_initialize_api():
+    auth_error = mcp_require_auth()
+    if auth_error:
+        return auth_error
+    return jsonify({
+        'protocolVersion': MCP_LEGACY_PROTOCOL_VERSION,
+        'serverName': 'CleanMyPlex',
+        'serverVersion': '1.0.0',
+        'capabilities': {'tools': {'listChanged': False}},
+        'tools': [mcp_tool_info(tool) for tool in MCP_TOOLS],
+    })
+
+
+@app.route('/api/mcp/tools')
+def mcp_tools_api():
+    auth_error = mcp_require_auth()
+    if auth_error:
+        return auth_error
+    return jsonify({'tools': [mcp_tool_info(tool) for tool in MCP_TOOLS], 'totalCount': len(MCP_TOOLS)})
+
+
+@app.route('/api/mcp/call', methods=['POST'])
+def mcp_call_api():
+    auth_error = mcp_require_auth()
+    if auth_error:
+        return auth_error
+
+    body = request.get_json(silent=True) or {}
+    tool_name = body.get('toolName')
+    if not tool_name:
+        return jsonify({'error': 'Invalid request: toolName is required.'}), 400
+    return jsonify(mcp_call_tool(tool_name, body.get('arguments', {})))
+
 
 @app.route('/settings', methods=['GET', 'POST'])
 def settings():
