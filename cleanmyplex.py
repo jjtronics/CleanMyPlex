@@ -83,14 +83,15 @@ def is_missing_value(value):
 
 
 def get_db_connection():
-    conn = sqlite3.connect(SQLITE_DB_FILE)
+    conn = sqlite3.connect(SQLITE_DB_FILE, timeout=30)
     conn.row_factory = sqlite3.Row
+    conn.execute('PRAGMA busy_timeout=30000')
     return conn
 
 
 def init_sqlite_store():
     with get_db_connection() as conn:
-        conn.execute('PRAGMA journal_mode=WAL')
+        conn.execute('PRAGMA journal_mode=DELETE')
         conn.execute('PRAGMA synchronous=NORMAL')
         conn.execute(
             '''
