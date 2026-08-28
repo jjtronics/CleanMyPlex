@@ -94,6 +94,7 @@ def create_task(task_id, task_type, message, progress=''):
         'status': 'running',
         'message': message,
         'progress': progress,
+        'progress_percent': 0,
         'errors': [],
         'created_at': now,
         'updated_at': now,
@@ -119,6 +120,7 @@ def serialize_task(task):
         'status': task.get('status', 'unknown'),
         'message': task.get('message', ''),
         'progress': task.get('progress', ''),
+        'progress_percent': task.get('progress_percent', 0),
         'errors': task.get('errors', []),
         'created_at': task.get('created_at'),
         'updated_at': task.get('updated_at'),
@@ -1073,7 +1075,7 @@ def compare_libraries(library_names_local, library_names_friend, media_type):
     return df, output_file, len(duplicates), total_space_saved
 
 
-def generate_csv(library_names, csv_file, media_type):
+def generate_csv(library_names, csv_file, media_type, task_id=None):
     pd = get_pandas()
     print(f"generate_csv appelé avec library_names={library_names}, csv_file='{csv_file}', media_type='{media_type}'")
     if os.path.exists(csv_file):
@@ -1105,6 +1107,14 @@ def generate_csv(library_names, csv_file, media_type):
     total_libraries = len(libraries)
     for lib_idx, library_name in enumerate(libraries):
         print(f"Traitement de la bibliothèque {lib_idx + 1}/{total_libraries} : '{library_name}'")
+        if task_id:
+            with tasks_lock:
+                update_task(
+                    task_id,
+                    message=f"Scan de la bibliothèque {library_name}.",
+                    progress=f"Bibliothèque {lib_idx + 1}/{total_libraries}",
+                    progress_percent=int((lib_idx / max(total_libraries, 1)) * 100)
+                )
         try:
             library = plex.library.section(library_name)
         except Exception as e:
@@ -1122,6 +1132,16 @@ def generate_csv(library_names, csv_file, media_type):
         total_items = len(all_items)
         for idx, item in enumerate(all_items):
             print(f"Traitement de l'élément {idx + 1}/{total_items} : '{item.title}'")
+            if task_id and (idx == 0 or (idx + 1) % 10 == 0 or idx + 1 == total_items):
+                library_share = (idx + 1) / max(total_items, 1)
+                percent = int(((lib_idx + library_share) / max(total_libraries, 1)) * 100)
+                with tasks_lock:
+                    update_task(
+                        task_id,
+                        message=f"Scan de {library_name} : {item.title}",
+                        progress=f"{idx + 1}/{total_items} éléments - bibliothèque {lib_idx + 1}/{total_libraries}",
+                        progress_percent=min(percent, 99)
+                    )
             try:
                 release_date = item.originallyAvailableAt if item.originallyAvailableAt else None
                 rating = item.audienceRating if item.audienceRating else 0
@@ -1208,6 +1228,14 @@ def generate_csv(library_names, csv_file, media_type):
 
     new_df = pd.DataFrame(new_items)
     print("Tous les éléments ont été traités. Création du DataFrame.")
+    if task_id:
+        with tasks_lock:
+            update_task(
+                task_id,
+                message=f"Préparation du CSV {csv_file}.",
+                progress="Écriture CSV et index SQLite",
+                progress_percent=99
+            )
 
     if not existing_df.empty and not new_df.empty:
         combined_df = pd.concat([existing_df, new_df]).drop_duplicates(subset='title', keep='first').reset_index(drop=True)
@@ -1244,9 +1272,15 @@ def generate_csv(library_names, csv_file, media_type):
 # Fonction de génération de CSV en arrière-plan avec thread
 def generate_csv_thread(library_names, csv_file, media_type, task_id):
     try:
-        generate_csv(library_names, csv_file, media_type)
+        generate_csv(library_names, csv_file, media_type, task_id)
         with tasks_lock:
-            update_task(task_id, status='completed', message=f"CSV {csv_file} généré avec succès.")
+            update_task(
+                task_id,
+                status='completed',
+                message=f"CSV {csv_file} généré avec succès.",
+                progress='Terminé',
+                progress_percent=100
+            )
         print(f"CSV {csv_file} généré avec succès.")
     except Exception as e:
         with tasks_lock:

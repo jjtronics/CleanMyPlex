@@ -302,6 +302,10 @@
 
                     list.innerHTML = tasks.map(function(task) {
                         var statusClass = taskStatusClass(task.status);
+                        var percent = Math.max(0, Math.min(100, Number(task.progress_percent || 0)));
+                        var progressBar = task.status === 'running' || percent > 0
+                            ? '<div class="job-progress"><span style="width: ' + percent + '%"></span></div>'
+                            : '';
                         var progress = task.progress ? '<small>' + escapeHtml(task.progress) + '</small>' : '';
                         var finished = task.finished_at ? '<small>Terminé : ' + escapeHtml(task.finished_at) + '</small>' : '';
                         var errors = task.errors && task.errors.length
@@ -314,8 +318,10 @@
                                     '<span>' + taskStatusLabel(task.status) + '</span>' +
                                 '</div>' +
                                 '<p>' + escapeHtml(task.message) + '</p>' +
+                                progressBar +
                                 '<div class="job-item__meta">' +
                                     '<small>Démarré : ' + escapeHtml(task.created_at) + '</small>' +
+                                    '<small>' + percent + '%</small>' +
                                     progress +
                                     finished +
                                     errors +

@@ -218,6 +218,22 @@ body.app-shell {
     line-height: 1.35;
 }
 
+.job-progress {
+    height: 0.42rem;
+    overflow: hidden;
+    margin-top: 0.55rem;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.92);
+}
+
+.job-progress span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #38bdf8, #14b8a6);
+    transition: width 220ms ease;
+}
+
 .job-item__meta {
     display: flex;
     flex-wrap: wrap;
