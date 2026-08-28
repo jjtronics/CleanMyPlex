@@ -141,6 +141,7 @@ def create_task(task_id, task_type, message, progress=''):
         'updated_at': now,
         'finished_at': None,
     }
+    save_task_to_db(tasks[task_id])
 
 
 def update_task(task_id, **updates):
@@ -152,6 +153,7 @@ def update_task(task_id, **updates):
     task['updated_at'] = current_timestamp()
     if task.get('status') in ['completed', 'completed_with_errors', 'failed'] and not task.get('finished_at'):
         task['finished_at'] = task['updated_at']
+    save_task_to_db(task)
 
 
 def serialize_task(task):
@@ -167,6 +169,80 @@ def serialize_task(task):
         'updated_at': task.get('updated_at'),
         'finished_at': task.get('finished_at'),
     }
+
+
+def save_task_to_db(task):
+    try:
+        with get_db_connection() as conn:
+            conn.execute(
+                '''
+                INSERT INTO task_history (
+                    id, task_type, status, message, progress, progress_percent,
+                    errors_json, created_at, updated_at, finished_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    task_type = excluded.task_type,
+                    status = excluded.status,
+                    message = excluded.message,
+                    progress = excluded.progress,
+                    progress_percent = excluded.progress_percent,
+                    errors_json = excluded.errors_json,
+                    updated_at = excluded.updated_at,
+                    finished_at = excluded.finished_at
+                ''',
+                (
+                    task.get('id'),
+                    task.get('type', 'Tâche'),
+                    task.get('status', 'unknown'),
+                    task.get('message', ''),
+                    task.get('progress', ''),
+                    int(task.get('progress_percent') or 0),
+                    json.dumps(task.get('errors', []), ensure_ascii=False),
+                    task.get('created_at'),
+                    task.get('updated_at'),
+                    task.get('finished_at'),
+                )
+            )
+    except Exception as e:
+        app.logger.warning("Impossible d'enregistrer le job %s: %s", task.get('id'), e)
+
+
+def load_recent_tasks(limit=100):
+    try:
+        with get_db_connection() as conn:
+            rows = conn.execute(
+                '''
+                SELECT id, task_type, status, message, progress, progress_percent,
+                       errors_json, created_at, updated_at, finished_at
+                FROM task_history
+                ORDER BY created_at DESC
+                LIMIT ?
+                ''',
+                (limit,)
+            ).fetchall()
+    except Exception as e:
+        app.logger.warning("Impossible de charger l'historique des jobs: %s", e)
+        return
+
+    with tasks_lock:
+        for row in rows:
+            try:
+                errors = json.loads(row['errors_json'] or '[]')
+            except json.JSONDecodeError:
+                errors = []
+            tasks[row['id']] = {
+                'id': row['id'],
+                'type': row['task_type'],
+                'status': row['status'],
+                'message': row['message'],
+                'progress': row['progress'],
+                'progress_percent': row['progress_percent'],
+                'errors': errors,
+                'created_at': row['created_at'],
+                'updated_at': row['updated_at'],
+                'finished_at': row['finished_at'],
+            }
 
 
 def get_db_connection():
@@ -222,6 +298,25 @@ def init_sqlite_store():
             conn.execute('CREATE INDEX IF NOT EXISTS idx_csv_rows_library ON csv_rows(csv_file, library)')
             conn.execute('CREATE INDEX IF NOT EXISTS idx_csv_rows_local_path ON csv_rows(csv_file, local_path)')
             conn.execute('CREATE INDEX IF NOT EXISTS idx_csv_rows_added_at ON csv_rows(csv_file, added_at)')
+            conn.execute(
+                '''
+                CREATE TABLE IF NOT EXISTS task_history (
+                    id TEXT PRIMARY KEY,
+                    task_type TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    message TEXT,
+                    progress TEXT,
+                    progress_percent INTEGER NOT NULL DEFAULT 0,
+                    errors_json TEXT NOT NULL DEFAULT '[]',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    finished_at TEXT
+                )
+                '''
+            )
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_task_history_created ON task_history(created_at DESC)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_task_history_status ON task_history(status)')
+            conn.execute("UPDATE csv_rows SET action = '' WHERE action = 'N/A'")
     except sqlite3.Error as e:
         app.logger.warning("Initialisation SQLite impossible, l'interface démarre en mode limité: %s", e)
 
@@ -284,13 +379,17 @@ def import_csv_to_sqlite(csv_file, force=False):
     rows = []
     for row_index, row in df.iterrows():
         data = {column: normalize_csv_cell(row.get(column, 'N/A')) for column in columns}
+        action_value = str(data.get('Action', '') or '').strip()
+        if action_value == 'N/A':
+            action_value = ''
+            data['Action'] = ''
         rows.append((
             csv_file,
             int(row_index),
             json.dumps(data, ensure_ascii=False),
             data.get('title'),
             data.get('ratingKey'),
-            data.get('Action', ''),
+            action_value,
             data.get('Bibliothèque'),
             data.get('local_path'),
             data.get('added_at'),
@@ -498,6 +597,28 @@ def get_order_clause(visible_columns, request_args):
     return f"json_extract(data_json, '$.{column_name}') COLLATE NOCASE {direction}, row_index ASC"
 
 
+def get_tasks_snapshot(limit=30):
+    with tasks_lock:
+        task_list = sorted(
+            (serialize_task(task) for task in tasks.values()),
+            key=lambda task: task.get('created_at') or '',
+            reverse=True
+        )
+
+    for task in task_list:
+        try:
+            task['progress_percent'] = max(0, min(100, int(task.get('progress_percent') or 0)))
+        except (TypeError, ValueError):
+            task['progress_percent'] = 0
+
+    active_count = sum(1 for task in task_list if task['status'] == 'running')
+    return {
+        'active_count': active_count,
+        'tasks': task_list[:limit],
+        'total': len(task_list),
+    }
+
+
 def update_csv_actions_from_request(csv_file, form_data):
     action_updates = []
     for key, value in form_data.items():
@@ -533,6 +654,8 @@ def update_csv_actions_from_request(csv_file, form_data):
 
 def render_csv_cell(row_id, data, column_name):
     value = normalize_csv_cell(data.get(column_name, 'N/A'))
+    if column_name == 'Action' and value == 'N/A':
+        value = ''
     safe_value = escape(value)
 
     if column_name == '__select__':
@@ -625,6 +748,7 @@ def csv_rows_api(csv_file):
 
 
 init_sqlite_store()
+load_recent_tasks()
 
 
 def connect_to_plex(plex_url, plex_token):
@@ -632,7 +756,7 @@ def connect_to_plex(plex_url, plex_token):
         return None, 'URL ou token Plex manquant.'
 
     try:
-        plex_server = PlexServer(plex_url, plex_token, timeout=10)
+        plex_server = PlexServer(plex_url, plex_token, timeout=60)
         plex_server.library.sections()
         return plex_server, None
     except Exception as e:
@@ -794,6 +918,51 @@ def get_active_sessions():
     except Exception as e:
         flash(f"Erreur lors de la récupération des sessions actives : {e}", 'danger')
         return []
+
+
+def episode_part_paths(episodes):
+    paths = []
+    for episode in episodes:
+        for media in getattr(episode, 'media', []) or []:
+            for media_part in getattr(media, 'parts', []) or []:
+                file_path = getattr(media_part, 'file', None)
+                if file_path:
+                    paths.append(str(file_path))
+    return paths
+
+
+def series_base_path(file_path):
+    parent = os.path.dirname(file_path)
+    folder_name = os.path.basename(parent).lower()
+    if re.match(r'^(season|saison|s)\s*\d+', folder_name):
+        return os.path.dirname(parent)
+    return parent
+
+
+def format_series_local_paths(file_paths):
+    if not file_paths:
+        return 'N/A'
+    base_paths = sorted({series_base_path(path) for path in file_paths if path})
+    return ' | '.join(base_paths) if base_paths else 'N/A'
+
+
+def delete_plex_item(item):
+    if getattr(item, 'TYPE', '') != 'show':
+        item.delete()
+        return 1, []
+
+    errors = []
+    deleted_episodes = 0
+    episodes = item.episodes()
+    for episode in episodes:
+        try:
+            episode.delete()
+            deleted_episodes += 1
+        except Exception as e:
+            episode_title = build_history_title(episode)
+            errors.append(f"{episode_title}: {e}")
+
+    return deleted_episodes, errors
 
 def get_view_history(user):
     try:
@@ -1229,13 +1398,15 @@ def generate_csv(library_names, csv_file, media_type, task_id=None):
                     local_path = item.media[0].parts[0].file if item.media and item.media[0].parts else 'N/A'
                     file_size_gb = sum(media_part.size for media in item.media for media_part in media.parts) / (1024 ** 3)
                 elif item.TYPE == 'show':
+                    episodes = item.episodes()
                     view_count = sum(
-                        episode.viewCount for episode in item.episodes() if hasattr(episode, 'viewCount')
+                        episode.viewCount for episode in episodes if hasattr(episode, 'viewCount') and episode.viewCount
                     )
-                    local_path = 'N/A'
+                    part_paths = episode_part_paths(episodes)
+                    local_path = format_series_local_paths(part_paths)
                     file_size_gb = sum(
                         media_part.size
-                        for episode in item.episodes()
+                        for episode in episodes
                         for media in episode.media
                         for media_part in media.parts
                     ) / (1024 ** 3)
@@ -1279,7 +1450,36 @@ def generate_csv(library_names, csv_file, media_type, task_id=None):
             )
 
     if not existing_df.empty and not new_df.empty:
-        combined_df = pd.concat([existing_df, new_df]).drop_duplicates(subset='title', keep='first').reset_index(drop=True)
+        existing_actions = {}
+        for _, existing_row in existing_df.iterrows():
+            action = str(existing_row.get('Action', '') or '').strip()
+            if action not in ['A', 'D']:
+                continue
+            rating_key = str(existing_row.get('ratingKey', '') or '').strip()
+            title = str(existing_row.get('title', '') or '').strip()
+            if rating_key and rating_key != 'N/A':
+                existing_actions[('ratingKey', rating_key)] = action
+            if title:
+                existing_actions[('title', title)] = action
+
+        def restored_action(row):
+            current_action = str(row.get('Action', '') or '').strip()
+            if current_action in ['A', 'D']:
+                return current_action
+            rating_key = str(row.get('ratingKey', '') or '').strip()
+            title = str(row.get('title', '') or '').strip()
+            return (
+                existing_actions.get(('ratingKey', rating_key))
+                or existing_actions.get(('title', title))
+                or ''
+            )
+
+        new_df['Action'] = new_df.apply(restored_action, axis=1)
+        new_keys = set(str(value) for value in new_df['ratingKey'].fillna('').astype(str))
+        old_rows_not_refreshed = existing_df[
+            ~existing_df['ratingKey'].fillna('').astype(str).isin(new_keys)
+        ]
+        combined_df = pd.concat([old_rows_not_refreshed, new_df]).drop_duplicates(subset='ratingKey', keep='last').reset_index(drop=True)
     elif not existing_df.empty:
         combined_df = existing_df
     elif not new_df.empty:
@@ -1345,7 +1545,8 @@ def delete_items_from_csv_thread(csv_file, task_id):
         deleted_items = 0
         already_absent_items = 0
 
-        for index, row in items_to_delete.iterrows():
+        for processed_index, (index, row) in enumerate(items_to_delete.iterrows(), start=1):
+            progress_percent = min(int((processed_index / max(total_items, 1)) * 100), 99)
             try:
                 rating_key = row.get('ratingKey')
                 if not is_missing_value(rating_key):
@@ -1368,7 +1569,8 @@ def delete_items_from_csv_thread(csv_file, task_id):
                                     progress=(
                                         f"{deleted_items} supprimés, {already_absent_items} déjà absents "
                                         f"sur {total_items} éléments."
-                                    )
+                                    ),
+                                    progress_percent=progress_percent
                                 )
                             continue
 
@@ -1379,7 +1581,16 @@ def delete_items_from_csv_thread(csv_file, task_id):
                             )
                         continue
 
-                    item.delete()
+                    deleted_children, child_errors = delete_plex_item(item)
+                    if child_errors:
+                        with tasks_lock:
+                            tasks[task_id]['errors'].append(
+                                f"Suppression partielle de {row['title']} : "
+                                f"{deleted_children} élément(s) supprimé(s), {len(child_errors)} erreur(s). "
+                                + " | ".join(child_errors[:5])
+                            )
+                        continue
+
                     df.drop(index, inplace=True)
                     deleted_items += 1
 
@@ -1387,16 +1598,19 @@ def delete_items_from_csv_thread(csv_file, task_id):
                         update_task(
                             task_id,
                             progress=(
-                                f"{deleted_items} supprimés, {already_absent_items} déjà absents "
+                                f"{deleted_items} lignes supprimées, {already_absent_items} déjà absentes "
                                 f"sur {total_items} éléments."
-                            )
+                            ),
+                            progress_percent=progress_percent
                         )
                 else:
                     with tasks_lock:
                         tasks[task_id]['errors'].append(f"Clé de notation invalide pour {row['title']}.")
+                        update_task(task_id, progress_percent=progress_percent)
             except Exception as e:
                 with tasks_lock:
                     tasks[task_id]['errors'].append(f"Erreur lors de la suppression de {row['title']}: {e}")
+                    update_task(task_id, progress_percent=progress_percent)
 
         df.to_csv(csv_file, index=False)
         import_csv_to_sqlite(csv_file, force=True)
@@ -1409,7 +1623,8 @@ def delete_items_from_csv_thread(csv_file, task_id):
                     message=(
                         f"Suppression terminée avec des erreurs. {deleted_items} supprimés, "
                         f"{already_absent_items} déjà absents sur {total_items} éléments."
-                    )
+                    ),
+                    progress_percent=100
                 )
             else:
                 update_task(
@@ -1418,7 +1633,8 @@ def delete_items_from_csv_thread(csv_file, task_id):
                     message=(
                         f"Suppression terminée avec succès. {deleted_items} supprimés, "
                         f"{already_absent_items} déjà absents."
-                    )
+                    ),
+                    progress_percent=100
                 )
 
     except Exception as e:
@@ -1699,18 +1915,16 @@ def task_status(task_id):
 
 @app.route('/api/tasks')
 def tasks_api():
-    with tasks_lock:
-        task_list = sorted(
-            (serialize_task(task) for task in tasks.values()),
-            key=lambda task: task.get('created_at') or '',
-            reverse=True
-        )
+    try:
+        limit = int(request.args.get('limit', 30))
+    except ValueError:
+        limit = 30
+    return jsonify(get_tasks_snapshot(limit=min(max(limit, 1), 200)))
 
-    active_count = sum(1 for task in task_list if task['status'] == 'running')
-    return jsonify({
-        'active_count': active_count,
-        'tasks': task_list[:30],
-    })
+
+@app.route('/jobs')
+def jobs_history():
+    return render_template('jobs.html', jobs=get_tasks_snapshot(limit=200)['tasks'])
 
 @app.route('/view_csv/<path:csv_file>', methods=['GET', 'POST'])
 def view_csv(csv_file):
@@ -1762,11 +1976,23 @@ def view_existing_csv(library):
 
 @app.route('/process_csv/<path:csv_file>', methods=['POST'])
 def process_csv(csv_file):
-    export_sqlite_to_csv(csv_file)
+    if not export_sqlite_to_csv(csv_file):
+        message = 'Le jeu de données demandé est introuvable.'
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'status': 'error', 'message': message}), 404
+        flash(message, 'danger')
+        return redirect(url_for('index'))
+
     task_id = str(uuid4())
     with tasks_lock:
         create_task(task_id, 'Suppression', 'La suppression a démarré.', '0%')
-    threading.Thread(target=delete_items_from_csv_thread, args=(csv_file, task_id)).start()
+    threading.Thread(target=delete_items_from_csv_thread, args=(csv_file, task_id), daemon=True).start()
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({
+            'status': 'success',
+            'message': 'Suppression lancée en arrière-plan. Suivi disponible dans les jobs.',
+            'task_id': task_id,
+        })
     return redirect(url_for('index', tasks=task_id))
 
 @app.route('/download/<path:csv_file>')
@@ -1971,10 +2197,10 @@ def mcp_dataset_summary(csv_file):
     with get_db_connection() as conn:
         rows = conn.execute(
             '''
-            SELECT COALESCE(action, '') AS action, COUNT(*) AS count
+            SELECT COALESCE(NULLIF(action, 'N/A'), '') AS action, COUNT(*) AS count
             FROM csv_rows
             WHERE csv_file = ?
-            GROUP BY COALESCE(action, '')
+            GROUP BY COALESCE(NULLIF(action, 'N/A'), '')
             ''',
             (csv_file,)
         ).fetchall()
@@ -2080,7 +2306,7 @@ def mcp_query_dataset(args):
 
     action = args.get('action')
     if action in ['', 'A', 'D']:
-        where_clauses.append('COALESCE(action, "") = ?')
+        where_clauses.append('COALESCE(NULLIF(action, "N/A"), "") = ?')
         params.append(action)
 
     order_by = str(args.get('order_by') or 'row_index')

@@ -147,6 +147,15 @@ body.app-shell {
     text-transform: uppercase;
 }
 
+.job-dock__header a {
+    color: #bae6fd;
+    text-decoration: none;
+}
+
+.job-dock__header a:hover {
+    color: #ffffff;
+}
+
 .job-dock__header small {
     color: var(--color-text-muted);
     font-weight: 700;
@@ -755,6 +764,98 @@ select[multiple] {
 .dataset-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     margin-top: 0.85rem;
+}
+
+.jobs-list {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.job-history-card {
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    background: rgba(15, 23, 42, 0.74);
+    padding: 0.95rem;
+}
+
+.job-history-card--running {
+    border-color: rgba(56, 189, 248, 0.42);
+}
+
+.job-history-card--completed {
+    border-color: rgba(52, 211, 153, 0.34);
+}
+
+.job-history-card--completed_with_errors,
+.job-history-card--failed {
+    border-color: rgba(251, 146, 60, 0.42);
+}
+
+.job-history-card__main {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.job-history-card h2 {
+    margin: 0;
+}
+
+.job-history-card p {
+    margin: 0.35rem 0 0;
+    color: var(--color-text-muted);
+}
+
+.job-history-card__status {
+    flex: 0 0 auto;
+    border: 1px solid rgba(125, 211, 252, 0.28);
+    border-radius: 999px;
+    background: rgba(14, 116, 144, 0.16);
+    color: #bae6fd;
+    font-size: 0.76rem;
+    font-weight: 800;
+    padding: 0.25rem 0.55rem;
+}
+
+.job-progress--history {
+    margin-top: 0.75rem;
+}
+
+.job-history-card__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem 0.8rem;
+    margin-top: 0.65rem;
+    color: var(--color-text-muted);
+}
+
+.job-history-card__errors {
+    margin-top: 0.75rem;
+    border-top: 1px solid var(--border-subtle);
+    padding-top: 0.65rem;
+}
+
+.job-history-card__errors summary {
+    color: #fed7aa;
+    cursor: pointer;
+    font-weight: 800;
+}
+
+.job-history-card__errors ul {
+    display: grid;
+    gap: 0.45rem;
+    margin: 0.65rem 0 0;
+    padding-left: 1.1rem;
+    color: #fecaca;
+    font-size: 0.84rem;
+}
+
+.empty-state {
+    border: 1px dashed var(--border-medium);
+    border-radius: 10px;
+    padding: 1.2rem;
+    text-align: center;
 }
 
 .detail-grid {

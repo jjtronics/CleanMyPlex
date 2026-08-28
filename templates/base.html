@@ -86,6 +86,13 @@
                         <span class="app-nav__subtitle">Accès et activité</span>
                     </span>
                 </a>
+                <a href="{{ url_for('jobs_history') }}" class="app-nav__link {% if endpoint == 'jobs_history' %}app-nav__link--active{% endif %}">
+                    <span class="app-nav__icon">▤</span>
+                    <span>
+                        <span class="app-nav__title">Jobs</span>
+                        <span class="app-nav__subtitle">Historique complet</span>
+                    </span>
+                </a>
             </div>
 
             <div class="app-nav__section">
@@ -156,7 +163,7 @@
         </button>
         <div class="job-dock__panel" id="job-dock-panel">
             <div class="job-dock__header">
-                <span>Historique des jobs</span>
+                <a href="{{ url_for('jobs_history') }}">Historique des jobs</a>
                 <small id="job-dock-updated">-</small>
             </div>
             <div class="job-dock__list" id="job-dock-list">
@@ -201,6 +208,9 @@
 
             document.addEventListener('submit', function(event) {
                 if (!event.target || event.defaultPrevented) {
+                    return;
+                }
+                if (event.target.hasAttribute('data-no-page-loader')) {
                     return;
                 }
 
@@ -340,6 +350,8 @@
                             pulse.className = 'job-dock__pulse job-dock__pulse--failed';
                         });
                 }
+
+                window.refreshCleanMyPlexJobs = refreshTasks;
 
                 toggle.addEventListener('click', function() {
                     setExpanded(!expanded);

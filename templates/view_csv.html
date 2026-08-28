@@ -120,7 +120,7 @@
 
         <div class="action-buttons mt-3">
             <a href="{{ url_for('download_csv', csv_file=csv_file) }}" class="btn btn-primary">Exporter en CSV</a>
-            <form action="{{ url_for('process_csv', csv_file=csv_file) }}" method="post" class="inline-form">
+            <form action="{{ url_for('process_csv', csv_file=csv_file) }}" method="post" class="inline-form js-process-csv-form" data-no-page-loader>
                 <button type="submit" class="btn btn-warning">Lancer la suppression</button>
             </form>
         </div>
@@ -454,6 +454,51 @@
             })
             .finally(function() {
                 saveButton.prop('disabled', false).text(originalLabel);
+            });
+        });
+
+        $('.js-process-csv-form').on('submit', function(e) {
+            e.preventDefault();
+
+            var form = this;
+            var button = $(form).find('button[type="submit"]');
+            var status = $('#csv-save-status');
+            var originalLabel = button.text();
+
+            button.prop('disabled', true).text('Lancement...');
+            status.removeClass('is-error is-success')
+                .addClass('is-visible is-info')
+                .text('Lancement du job de suppression...');
+
+            fetch(form.action, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+            .then(function(response) {
+                return response.json().then(function(payload) {
+                    if (!response.ok || payload.status !== 'success') {
+                        throw new Error(payload.message || 'Impossible de lancer la suppression.');
+                    }
+                    return payload;
+                });
+            })
+            .then(function(payload) {
+                status.removeClass('is-error is-info')
+                    .addClass('is-success')
+                    .text(payload.message || 'Suppression lancée en arrière-plan.');
+                if (window.refreshCleanMyPlexJobs) {
+                    window.refreshCleanMyPlexJobs();
+                }
+            })
+            .catch(function(error) {
+                status.removeClass('is-success is-info')
+                    .addClass('is-error')
+                    .text(error.message || 'Erreur pendant le lancement.');
+            })
+            .finally(function() {
+                button.prop('disabled', false).text(originalLabel);
             });
         });
 

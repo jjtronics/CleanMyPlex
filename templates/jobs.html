@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Jobs{% endblock %}
+{% block header_title %}Historique des jobs{% endblock %}
+{% block header_subtitle %}Suivi des scans, comparaisons et suppressions, même après redémarrage du service.{% endblock %}
+
+{% block content %}
+    <div class="jobs-page">
+        {% if jobs %}
+            <div class="jobs-list">
+                {% for job in jobs %}
+                    <article class="job-history-card job-history-card--{{ job.status }}">
+                        <div class="job-history-card__main">
+                            <div>
+                                <h2>{{ job.type }}</h2>
+                                <p>{{ job.message }}</p>
+                            </div>
+                            <span class="job-history-card__status">
+                                {% if job.status == 'running' %}En cours
+                                {% elif job.status == 'completed' %}Terminé
+                                {% elif job.status == 'completed_with_errors' %}Terminé avec erreurs
+                                {% elif job.status == 'failed' %}Erreur
+                                {% else %}Inconnu{% endif %}
+                            </span>
+                        </div>
+
+                        <div class="job-progress job-progress--history">
+                            <span style="width: {{ job.progress_percent|int }}%"></span>
+                        </div>
+
+                        <div class="job-history-card__meta">
+                            <small>Démarré : {{ job.created_at }}</small>
+                            <small>Mis à jour : {{ job.updated_at }}</small>
+                            {% if job.finished_at %}<small>Terminé : {{ job.finished_at }}</small>{% endif %}
+                            {% if job.progress %}<small>{{ job.progress }}</small>{% endif %}
+                        </div>
+
+                        {% if job.errors %}
+                            <details class="job-history-card__errors">
+                                <summary>{{ job.errors|length }} erreur(s)</summary>
+                                <ul>
+                                    {% for error in job.errors %}
+                                        <li>{{ error }}</li>
+                                    {% endfor %}
+                                </ul>
+                            </details>
+                        {% endif %}
+                    </article>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <h2>Aucun job</h2>
+                <p>Aucun scan, comparaison ou traitement n'a encore été lancé.</p>
+            </div>
+        {% endif %}
+    </div>
+{% endblock %}
