@@ -134,51 +134,53 @@ def get_db_connection():
 
 
 def init_sqlite_store():
-    with get_db_connection() as conn:
-        conn.execute('PRAGMA journal_mode=DELETE')
-        conn.execute('PRAGMA synchronous=NORMAL')
-        conn.execute(
-            '''
-            CREATE TABLE IF NOT EXISTS csv_datasets (
-                csv_file TEXT PRIMARY KEY,
-                columns_json TEXT NOT NULL,
-                source_mtime REAL NOT NULL,
-                row_count INTEGER NOT NULL DEFAULT 0,
-                imported_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    try:
+        with get_db_connection() as conn:
+            conn.execute('PRAGMA synchronous=NORMAL')
+            conn.execute(
+                '''
+                CREATE TABLE IF NOT EXISTS csv_datasets (
+                    csv_file TEXT PRIMARY KEY,
+                    columns_json TEXT NOT NULL,
+                    source_mtime REAL NOT NULL,
+                    row_count INTEGER NOT NULL DEFAULT 0,
+                    imported_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                '''
             )
-            '''
-        )
-        conn.execute(
-            '''
-            CREATE TABLE IF NOT EXISTS csv_rows (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                csv_file TEXT NOT NULL,
-                row_index INTEGER NOT NULL,
-                data_json TEXT NOT NULL,
-                title TEXT,
-                rating_key TEXT,
-                action TEXT,
-                library TEXT,
-                local_path TEXT,
-                added_at TEXT,
-                release_date TEXT,
-                rating REAL,
-                plex_rating REAL,
-                view_count REAL,
-                file_size REAL,
-                local_file_size REAL,
-                remote_file_size REAL,
-                largest_file_size REAL,
-                UNIQUE(csv_file, row_index)
+            conn.execute(
+                '''
+                CREATE TABLE IF NOT EXISTS csv_rows (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    csv_file TEXT NOT NULL,
+                    row_index INTEGER NOT NULL,
+                    data_json TEXT NOT NULL,
+                    title TEXT,
+                    rating_key TEXT,
+                    action TEXT,
+                    library TEXT,
+                    local_path TEXT,
+                    added_at TEXT,
+                    release_date TEXT,
+                    rating REAL,
+                    plex_rating REAL,
+                    view_count REAL,
+                    file_size REAL,
+                    local_file_size REAL,
+                    remote_file_size REAL,
+                    largest_file_size REAL,
+                    UNIQUE(csv_file, row_index)
+                )
+                '''
             )
-            '''
-        )
-        conn.execute('CREATE INDEX IF NOT EXISTS idx_csv_rows_file ON csv_rows(csv_file)')
-        conn.execute('CREATE INDEX IF NOT EXISTS idx_csv_rows_title ON csv_rows(csv_file, title)')
-        conn.execute('CREATE INDEX IF NOT EXISTS idx_csv_rows_action ON csv_rows(csv_file, action)')
-        conn.execute('CREATE INDEX IF NOT EXISTS idx_csv_rows_library ON csv_rows(csv_file, library)')
-        conn.execute('CREATE INDEX IF NOT EXISTS idx_csv_rows_local_path ON csv_rows(csv_file, local_path)')
-        conn.execute('CREATE INDEX IF NOT EXISTS idx_csv_rows_added_at ON csv_rows(csv_file, added_at)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_csv_rows_file ON csv_rows(csv_file)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_csv_rows_title ON csv_rows(csv_file, title)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_csv_rows_action ON csv_rows(csv_file, action)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_csv_rows_library ON csv_rows(csv_file, library)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_csv_rows_local_path ON csv_rows(csv_file, local_path)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_csv_rows_added_at ON csv_rows(csv_file, added_at)')
+    except sqlite3.Error as e:
+        app.logger.warning("Initialisation SQLite impossible, l'interface démarre en mode limité: %s", e)
 
 
 def parse_size_gb(value):
