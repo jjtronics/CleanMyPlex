@@ -145,6 +145,25 @@
             </section>
         </main>
     </div>
+    <aside class="job-dock" id="job-dock" data-tasks-url="{{ url_for('tasks_api') }}">
+        <button class="job-dock__summary" type="button" id="job-dock-toggle" aria-expanded="false">
+            <span class="job-dock__pulse" id="job-dock-pulse"></span>
+            <span>
+                <strong id="job-dock-title">Jobs</strong>
+                <small id="job-dock-subtitle">Aucune tâche récente</small>
+            </span>
+            <span class="job-dock__chevron" aria-hidden="true">⌃</span>
+        </button>
+        <div class="job-dock__panel" id="job-dock-panel">
+            <div class="job-dock__header">
+                <span>Historique des jobs</span>
+                <small id="job-dock-updated">-</small>
+            </div>
+            <div class="job-dock__list" id="job-dock-list">
+                <div class="job-dock__empty">Aucun job lancé depuis ce démarrage.</div>
+            </div>
+        </div>
+    </aside>
     <!-- Inclure jQuery -->
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <!-- Inclure Bootstrap JS -->
@@ -216,6 +235,113 @@
 
                 refreshPlexStatus();
                 window.setInterval(refreshPlexStatus, 10000);
+            }
+
+            var jobDock = document.getElementById('job-dock');
+            if (jobDock) {
+                var tasksUrl = jobDock.getAttribute('data-tasks-url');
+                var toggle = document.getElementById('job-dock-toggle');
+                var title = document.getElementById('job-dock-title');
+                var subtitle = document.getElementById('job-dock-subtitle');
+                var pulse = document.getElementById('job-dock-pulse');
+                var list = document.getElementById('job-dock-list');
+                var updated = document.getElementById('job-dock-updated');
+                var expanded = window.localStorage.getItem('cleanmyplex.jobsExpanded') === 'true';
+
+                function setExpanded(nextExpanded) {
+                    expanded = nextExpanded;
+                    jobDock.classList.toggle('is-expanded', expanded);
+                    toggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+                    window.localStorage.setItem('cleanmyplex.jobsExpanded', expanded ? 'true' : 'false');
+                }
+
+                function taskStatusLabel(status) {
+                    if (status === 'running') return 'En cours';
+                    if (status === 'completed') return 'Terminé';
+                    if (status === 'completed_with_errors') return 'Terminé avec erreurs';
+                    if (status === 'failed') return 'Erreur';
+                    return 'Inconnu';
+                }
+
+                function taskStatusClass(status) {
+                    if (status === 'running') return 'running';
+                    if (status === 'completed') return 'completed';
+                    if (status === 'completed_with_errors') return 'warning';
+                    if (status === 'failed') return 'failed';
+                    return 'unknown';
+                }
+
+                function escapeHtml(value) {
+                    return String(value || '').replace(/[&<>"']/g, function(char) {
+                        return {
+                            '&': '&amp;',
+                            '<': '&lt;',
+                            '>': '&gt;',
+                            '"': '&quot;',
+                            "'": '&#039;'
+                        }[char];
+                    });
+                }
+
+                function renderTasks(payload) {
+                    var tasks = payload.tasks || [];
+                    var activeCount = payload.active_count || 0;
+                    var now = new Date();
+
+                    title.textContent = activeCount > 0 ? activeCount + ' job(s) en cours' : 'Jobs';
+                    subtitle.textContent = tasks.length
+                        ? tasks.length + ' tâche(s) suivie(s), dernière mise à jour ' + now.toLocaleTimeString()
+                        : 'Aucune tâche récente';
+                    pulse.className = 'job-dock__pulse ' + (activeCount > 0 ? 'job-dock__pulse--running' : 'job-dock__pulse--idle');
+                    updated.textContent = now.toLocaleString();
+
+                    if (!tasks.length) {
+                        list.innerHTML = '<div class="job-dock__empty">Aucun job lancé depuis ce démarrage.</div>';
+                        return;
+                    }
+
+                    list.innerHTML = tasks.map(function(task) {
+                        var statusClass = taskStatusClass(task.status);
+                        var progress = task.progress ? '<small>' + escapeHtml(task.progress) + '</small>' : '';
+                        var finished = task.finished_at ? '<small>Terminé : ' + escapeHtml(task.finished_at) + '</small>' : '';
+                        var errors = task.errors && task.errors.length
+                            ? '<small>' + task.errors.length + ' erreur(s)</small>'
+                            : '';
+                        return (
+                            '<article class="job-item job-item--' + statusClass + '">' +
+                                '<div class="job-item__top">' +
+                                    '<strong>' + escapeHtml(task.type) + '</strong>' +
+                                    '<span>' + taskStatusLabel(task.status) + '</span>' +
+                                '</div>' +
+                                '<p>' + escapeHtml(task.message) + '</p>' +
+                                '<div class="job-item__meta">' +
+                                    '<small>Démarré : ' + escapeHtml(task.created_at) + '</small>' +
+                                    progress +
+                                    finished +
+                                    errors +
+                                '</div>' +
+                            '</article>'
+                        );
+                    }).join('');
+                }
+
+                function refreshTasks() {
+                    fetch(tasksUrl, { cache: 'no-store' })
+                        .then(function(response) { return response.json(); })
+                        .then(renderTasks)
+                        .catch(function() {
+                            subtitle.textContent = 'Suivi des jobs indisponible';
+                            pulse.className = 'job-dock__pulse job-dock__pulse--failed';
+                        });
+                }
+
+                toggle.addEventListener('click', function() {
+                    setExpanded(!expanded);
+                });
+
+                setExpanded(expanded);
+                refreshTasks();
+                window.setInterval(refreshTasks, 3000);
             }
         })();
     </script>

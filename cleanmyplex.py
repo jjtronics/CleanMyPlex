@@ -82,6 +82,50 @@ def is_missing_value(value):
     return value is None or value != value
 
 
+def current_timestamp():
+    return time.strftime('%Y-%m-%d %H:%M:%S')
+
+
+def create_task(task_id, task_type, message, progress=''):
+    now = current_timestamp()
+    tasks[task_id] = {
+        'id': task_id,
+        'type': task_type,
+        'status': 'running',
+        'message': message,
+        'progress': progress,
+        'errors': [],
+        'created_at': now,
+        'updated_at': now,
+        'finished_at': None,
+    }
+
+
+def update_task(task_id, **updates):
+    task = tasks.get(task_id)
+    if not task:
+        return
+
+    task.update(updates)
+    task['updated_at'] = current_timestamp()
+    if task.get('status') in ['completed', 'completed_with_errors', 'failed'] and not task.get('finished_at'):
+        task['finished_at'] = task['updated_at']
+
+
+def serialize_task(task):
+    return {
+        'id': task.get('id'),
+        'type': task.get('type', 'Tâche'),
+        'status': task.get('status', 'unknown'),
+        'message': task.get('message', ''),
+        'progress': task.get('progress', ''),
+        'errors': task.get('errors', []),
+        'created_at': task.get('created_at'),
+        'updated_at': task.get('updated_at'),
+        'finished_at': task.get('finished_at'),
+    }
+
+
 def get_db_connection():
     conn = sqlite3.connect(SQLITE_DB_FILE, timeout=30)
     conn.row_factory = sqlite3.Row
@@ -1200,13 +1244,11 @@ def generate_csv_thread(library_names, csv_file, media_type, task_id):
     try:
         generate_csv(library_names, csv_file, media_type)
         with tasks_lock:
-            tasks[task_id]['status'] = 'completed'
-            tasks[task_id]['message'] = f"CSV {csv_file} généré avec succès."
+            update_task(task_id, status='completed', message=f"CSV {csv_file} généré avec succès.")
         print(f"CSV {csv_file} généré avec succès.")
     except Exception as e:
         with tasks_lock:
-            tasks[task_id]['status'] = 'failed'
-            tasks[task_id]['message'] = f"Erreur lors de la génération du CSV : {e}"
+            update_task(task_id, status='failed', message=f"Erreur lors de la génération du CSV : {e}")
         print(f"Erreur lors de la génération du CSV : {e}")
 
 # Nouvelle fonction pour la suppression en tâche de fond
@@ -1215,8 +1257,7 @@ def delete_items_from_csv_thread(csv_file, task_id):
         pd = get_pandas()
         if not os.path.exists(csv_file):
             with tasks_lock:
-                tasks[task_id]['status'] = 'failed'
-                tasks[task_id]['message'] = f"Le fichier CSV {csv_file} n'existe pas."
+                update_task(task_id, status='failed', message=f"Le fichier CSV {csv_file} n'existe pas.")
             return
 
         df = pd.read_csv(csv_file)
@@ -1244,9 +1285,12 @@ def delete_items_from_csv_thread(csv_file, task_id):
                             df.drop(index, inplace=True)
                             already_absent_items += 1
                             with tasks_lock:
-                                tasks[task_id]['progress'] = (
-                                    f"{deleted_items} supprimés, {already_absent_items} déjà absents "
-                                    f"sur {total_items} éléments."
+                                update_task(
+                                    task_id,
+                                    progress=(
+                                        f"{deleted_items} supprimés, {already_absent_items} déjà absents "
+                                        f"sur {total_items} éléments."
+                                    )
                                 )
                             continue
 
@@ -1262,9 +1306,12 @@ def delete_items_from_csv_thread(csv_file, task_id):
                     deleted_items += 1
 
                     with tasks_lock:
-                        tasks[task_id]['progress'] = (
-                            f"{deleted_items} supprimés, {already_absent_items} déjà absents "
-                            f"sur {total_items} éléments."
+                        update_task(
+                            task_id,
+                            progress=(
+                                f"{deleted_items} supprimés, {already_absent_items} déjà absents "
+                                f"sur {total_items} éléments."
+                            )
                         )
                 else:
                     with tasks_lock:
@@ -1278,34 +1325,37 @@ def delete_items_from_csv_thread(csv_file, task_id):
 
         with tasks_lock:
             if tasks[task_id]['errors']:
-                tasks[task_id]['status'] = 'completed_with_errors'
-                tasks[task_id]['message'] = (
-                    f"Suppression terminée avec des erreurs. {deleted_items} supprimés, "
-                    f"{already_absent_items} déjà absents sur {total_items} éléments."
+                update_task(
+                    task_id,
+                    status='completed_with_errors',
+                    message=(
+                        f"Suppression terminée avec des erreurs. {deleted_items} supprimés, "
+                        f"{already_absent_items} déjà absents sur {total_items} éléments."
+                    )
                 )
             else:
-                tasks[task_id]['status'] = 'completed'
-                tasks[task_id]['message'] = (
-                    f"Suppression terminée avec succès. {deleted_items} supprimés, "
-                    f"{already_absent_items} déjà absents."
+                update_task(
+                    task_id,
+                    status='completed',
+                    message=(
+                        f"Suppression terminée avec succès. {deleted_items} supprimés, "
+                        f"{already_absent_items} déjà absents."
+                    )
                 )
 
     except Exception as e:
         with tasks_lock:
-            tasks[task_id]['status'] = 'failed'
-            tasks[task_id]['message'] = f"Erreur lors de la suppression : {e}"
+            update_task(task_id, status='failed', message=f"Erreur lors de la suppression : {e}")
 
 def compare_libraries_thread(local_library_names, friend_library_names, media_type, task_id):
     try:
         df, output_file, num_items, total_space_saved_gb = compare_libraries(local_library_names, friend_library_names, media_type)
         import_csv_to_sqlite(output_file, force=True)
         with tasks_lock:
-            tasks[task_id]['status'] = 'completed'
-            tasks[task_id]['message'] = f"CSV {output_file} généré avec succès."
+            update_task(task_id, status='completed', message=f"CSV {output_file} généré avec succès.")
     except Exception as e:
         with tasks_lock:
-            tasks[task_id]['status'] = 'failed'
-            tasks[task_id]['message'] = f"Erreur lors de la comparaison des bibliothèques : {e}"
+            update_task(task_id, status='failed', message=f"Erreur lors de la comparaison des bibliothèques : {e}")
 
 @app.route('/test_token', methods=['POST'])
 def test_token():
@@ -1472,7 +1522,7 @@ def clean():
             media_type = 'movie'
             task_id = str(uuid4())
             with tasks_lock:
-                tasks[task_id] = {'status': 'running', 'message': 'La génération du CSV des films a démarré.'}
+                create_task(task_id, 'Scan films', 'La génération du CSV des films a démarré.', 'Initialisation...')
             threading.Thread(target=generate_csv_thread, args=(selected_movie_libraries, csv_file, media_type, task_id)).start()
             tasks_list.append(task_id)
             flash('La génération du CSV des films a démarré en arrière-plan.', 'info')
@@ -1482,7 +1532,7 @@ def clean():
             media_type = 'show'
             task_id = str(uuid4())
             with tasks_lock:
-                tasks[task_id] = {'status': 'running', 'message': 'La génération du CSV des séries a démarré.'}
+                create_task(task_id, 'Scan séries', 'La génération du CSV des séries a démarré.', 'Initialisation...')
             threading.Thread(target=generate_csv_thread, args=(selected_series_libraries, csv_file, media_type, task_id)).start()
             tasks_list.append(task_id)
             flash('La génération du CSV des séries a démarré en arrière-plan.', 'info')
@@ -1536,7 +1586,7 @@ def duplicates():
             media_type = 'movie'
             task_id = str(uuid4())
             with tasks_lock:
-                tasks[task_id] = {'status': 'running', 'message': 'La comparaison des films a démarré.'}
+                create_task(task_id, 'Doublons films', 'La comparaison des films a démarré.', 'Initialisation...')
             threading.Thread(target=compare_libraries_thread, args=(selected_local_movie_libraries, selected_friend_movie_libraries, media_type, task_id)).start()
             tasks_list.append(task_id)
             flash('La comparaison des films a démarré en arrière-plan.', 'info')
@@ -1545,7 +1595,7 @@ def duplicates():
             media_type = 'show'
             task_id = str(uuid4())
             with tasks_lock:
-                tasks[task_id] = {'status': 'running', 'message': 'La comparaison des séries a démarré.'}
+                create_task(task_id, 'Doublons séries', 'La comparaison des séries a démarré.', 'Initialisation...')
             threading.Thread(target=compare_libraries_thread, args=(selected_local_series_libraries, selected_friend_series_libraries, media_type, task_id)).start()
             tasks_list.append(task_id)
             flash('La comparaison des séries a démarré en arrière-plan.', 'info')
@@ -1568,7 +1618,24 @@ def duplicates():
 def task_status(task_id):
     with tasks_lock:
         status = tasks.get(task_id, {'status': 'unknown', 'message': 'Tâche inconnue.'})
-    return jsonify(status)
+        payload = serialize_task(status) if task_id in tasks else status
+    return jsonify(payload)
+
+
+@app.route('/api/tasks')
+def tasks_api():
+    with tasks_lock:
+        task_list = sorted(
+            (serialize_task(task) for task in tasks.values()),
+            key=lambda task: task.get('created_at') or '',
+            reverse=True
+        )
+
+    active_count = sum(1 for task in task_list if task['status'] == 'running')
+    return jsonify({
+        'active_count': active_count,
+        'tasks': task_list[:30],
+    })
 
 @app.route('/view_csv/<path:csv_file>', methods=['GET', 'POST'])
 def view_csv(csv_file):
@@ -1622,12 +1689,7 @@ def process_csv(csv_file):
     export_sqlite_to_csv(csv_file)
     task_id = str(uuid4())
     with tasks_lock:
-        tasks[task_id] = {
-            'status': 'running',
-            'message': 'La suppression a démarré.',
-            'progress': '0%',
-            'errors': []
-        }
+        create_task(task_id, 'Suppression CSV', 'La suppression a démarré.', '0%')
     threading.Thread(target=delete_items_from_csv_thread, args=(csv_file, task_id)).start()
     flash('La suppression a démarré en arrière-plan.', 'info')
     return redirect(url_for('index', tasks=task_id))
