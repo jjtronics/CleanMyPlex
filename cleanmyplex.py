@@ -811,7 +811,20 @@ def refresh_connections_async():
     threading.Thread(target=refresh_connections, daemon=True).start()
 
 
+def ensure_live_connections(require_plex=False, require_account=False):
+    needs_refresh = False
+    with connection_lock:
+        if require_plex and plex is None and not connection_status['refreshing']:
+            needs_refresh = True
+        if require_account and account is None and connection_status['account_configured'] and not connection_status['refreshing']:
+            needs_refresh = True
+
+    if needs_refresh:
+        refresh_connections()
+
+
 def ensure_required_connections(require_plex=False, require_account=False):
+    ensure_live_connections(require_plex=require_plex, require_account=require_account)
     errors = []
 
     if require_plex and plex is None:
@@ -2256,6 +2269,7 @@ def mcp_status(_args):
 
 
 def mcp_list_libraries(_args):
+    ensure_live_connections(require_plex=True)
     if plex is None:
         return mcp_error('Connexion au serveur Plex indisponible.', 'PLEX_UNAVAILABLE')
     return mcp_success({
@@ -2408,6 +2422,7 @@ def mcp_set_dataset_actions(args):
 
 
 def mcp_start_unwatched_scan(args):
+    ensure_live_connections(require_plex=True)
     if plex is None:
         return mcp_error('Connexion au serveur Plex indisponible.', 'PLEX_UNAVAILABLE')
 
@@ -2432,6 +2447,7 @@ def mcp_start_unwatched_scan(args):
 
 
 def mcp_start_duplicate_scan(args):
+    ensure_live_connections(require_plex=True, require_account=True)
     if plex is None or account is None:
         return mcp_error('Connexion Plex ou compte Plex indisponible.', 'PLEX_UNAVAILABLE')
 
@@ -2461,6 +2477,7 @@ def mcp_start_duplicate_scan(args):
 
 
 def mcp_start_delete_marked_items(args):
+    ensure_live_connections(require_plex=True)
     if plex is None:
         return mcp_error('Connexion au serveur Plex indisponible.', 'PLEX_UNAVAILABLE')
     csv_file = resolve_dataset_file(args.get('dataset'))
@@ -2488,6 +2505,7 @@ def mcp_list_jobs(args):
 
 
 def mcp_list_users(_args):
+    ensure_live_connections(require_account=True)
     if account is None:
         return mcp_error('Connexion au compte Plex indisponible.', 'PLEX_ACCOUNT_UNAVAILABLE')
     try:
