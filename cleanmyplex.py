@@ -2,6 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, sen
 import requests
 from plexapi.server import PlexServer
 from plexapi.myplex import MyPlexAccount
+from plexapi.exceptions import TwoFactorRequired
 import json
 import os
 import re
@@ -764,7 +765,7 @@ def connect_to_plex(plex_url, plex_token):
         return None, str(e)
 
 
-def connect_to_account(username='', password='', token=''):
+def connect_to_account(username='', password='', token='', code=''):
     if token:
         try:
             plex_account = MyPlexAccount(token=token)
@@ -781,12 +782,30 @@ def connect_to_account(username='', password='', token=''):
         return None, "Le nom d'utilisateur et le mot de passe Plex doivent être renseignés ensemble."
 
     try:
-        plex_account = MyPlexAccount(username, password)
+        plex_account = MyPlexAccount(username, password, code=code or None)
         plex_account.resources()
         return plex_account, None
     except Exception as e:
         app.logger.warning("Connexion au compte Plex impossible: %s", e)
         return None, str(e)
+
+
+def get_plex_token_from_credentials(username, password, code=''):
+    if not username or not password:
+        return None, 'Le username et le password Plex sont requis.', False
+
+    try:
+        plex_account = MyPlexAccount(username, password, code=code or None, remember=True)
+        plex_account.resources()
+        token = getattr(plex_account, 'authenticationToken', None) or getattr(plex_account, 'authToken', None)
+        if not token:
+            return None, 'Authentification réussie, mais Plex n’a pas renvoyé de token.', False
+        return token, None, False
+    except TwoFactorRequired as e:
+        return None, str(e), True
+    except Exception as e:
+        app.logger.warning("Impossible de récupérer un token Plex: %s", e)
+        return None, str(e), False
 
 
 def refresh_connections():
@@ -1686,12 +1705,21 @@ def test_token():
 def test_login():
     plex_username = request.form['PLEX_USERNAME']
     plex_password = request.form['PLEX_PASSWORD']
-    _, error_message = connect_to_account(plex_username, plex_password)
+    plex_mfa_code = request.form.get('PLEX_MFA_CODE', '').strip().replace(' ', '')
+    token, error_message, needs_mfa = get_plex_token_from_credentials(plex_username, plex_password, plex_mfa_code)
 
     if error_message:
-        return jsonify({'status': 'error', 'message': f'Erreur : {error_message}'})
+        return jsonify({
+            'status': 'mfa_required' if needs_mfa else 'error',
+            'needs_mfa': needs_mfa,
+            'message': 'Code MFA Plex requis.' if needs_mfa else f'Erreur : {error_message}'
+        })
 
-    return jsonify({'status': 'success', 'message': 'Connexion réussie avec ces identifiants !'})
+    return jsonify({
+        'status': 'success',
+        'message': 'Connexion réussie. Token Plex récupéré et prêt à enregistrer.',
+        'token': token,
+    })
 
 @app.route('/manage_users')
 def manage_users():
@@ -2681,6 +2709,7 @@ def settings():
         plex_token = request.form.get('PLEX_TOKEN', '').strip()
         plex_username = request.form.get('PLEX_USERNAME', '').strip()
         plex_password = request.form.get('PLEX_PASSWORD', '').strip()
+        plex_mfa_code = request.form.get('PLEX_MFA_CODE', '').strip().replace(' ', '')
         friend_server_name = request.form.get('friend_server_name', '').strip()
         if os.environ.get('CLEANMYPLEX_MCP_API_KEY'):
             mcp_api_key = config.get('MCP_API_KEY', '')
@@ -2688,8 +2717,31 @@ def settings():
             mcp_api_key = request.form.get('MCP_API_KEY', '').strip()
 
         if not plex_token and not (plex_username and plex_password):
-            flash('Renseignez soit un token Plex, soit un couple username/password.', 'warning')
+            flash('Renseignez soit un token Plex, soit un couple username/password Plex.', 'warning')
             return redirect(url_for('settings'))
+
+        credentials_changed = (
+            plex_username != config.get('PLEX_USERNAME', '')
+            or plex_password != config.get('PLEX_PASSWORD', '')
+        )
+        should_refresh_token = bool(
+            plex_username and plex_password and (not plex_token or plex_mfa_code or credentials_changed)
+        )
+
+        if should_refresh_token:
+            generated_token, token_error, needs_mfa = get_plex_token_from_credentials(
+                plex_username,
+                plex_password,
+                plex_mfa_code
+            )
+            if needs_mfa:
+                flash('Code MFA Plex requis pour récupérer le token. Saisissez le code à 6 chiffres puis enregistrez à nouveau.', 'warning')
+                return redirect(url_for('settings'))
+            if generated_token:
+                plex_token = generated_token
+            elif not plex_token:
+                flash(f"Impossible de récupérer un token Plex avec ces identifiants : {token_error}", 'warning')
+                return redirect(url_for('settings'))
 
         config['PLEX_URL'] = plex_url
         config['PLEX_TOKEN'] = plex_token

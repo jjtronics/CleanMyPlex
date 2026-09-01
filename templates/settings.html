@@ -22,7 +22,7 @@
         <div class="settings-card">
             <div class="section-header section-header--compact">
                 <h2>Authentification</h2>
-                <span>Avec MFA, le token Plex suffit pour le serveur et le compte.</span>
+                <span>Connexion Plex avec token direct ou génération depuis le compte avec MFA.</span>
             </div>
             <div class="form-group">
                 <label for="PLEX_TOKEN">Token Plex</label>
@@ -47,11 +47,27 @@
                     </div>
                 </div>
             </div>
-            <button type="button" class="btn btn-secondary" id="test-login">Tester le login</button>
+
+            <div class="form-group">
+                <label for="PLEX_MFA_CODE">Code MFA Plex</label>
+                <div class="input-action">
+                    <input
+                        type="text"
+                        class="form-control"
+                        id="PLEX_MFA_CODE"
+                        name="PLEX_MFA_CODE"
+                        inputmode="numeric"
+                        autocomplete="one-time-code"
+                        placeholder="Code à 6 chiffres si demandé"
+                    >
+                    <button type="button" class="btn btn-secondary" id="test-login">Récupérer le token</button>
+                </div>
+                <div class="field-hint">Le code MFA n'est jamais enregistré. Le token récupéré est placé dans le champ Token Plex.</div>
+            </div>
             <div id="login-test-result" class="test-result"></div>
 
             <div id="auth-validation-result" class="alert alert-danger auth-validation">
-                Renseigne un token Plex ou un couple username/password.
+                Renseigne un token Plex ou un couple username/password Plex.
             </div>
         </div>
 
@@ -144,6 +160,7 @@
         const tokenInput = document.getElementById('PLEX_TOKEN');
         const usernameInput = document.getElementById('PLEX_USERNAME');
         const passwordInput = document.getElementById('PLEX_PASSWORD');
+        const mfaCodeInput = document.getElementById('PLEX_MFA_CODE');
         const mcpKeyInput = document.getElementById('MCP_API_KEY');
         const authValidationResult = document.getElementById('auth-validation-result');
 
@@ -174,6 +191,9 @@
         tokenInput.addEventListener('input', updateAuthenticationValidation);
         usernameInput.addEventListener('input', updateAuthenticationValidation);
         passwordInput.addEventListener('input', updateAuthenticationValidation);
+        mfaCodeInput.addEventListener('input', function() {
+            mfaCodeInput.value = mfaCodeInput.value.replace(/\D/g, '').slice(0, 8);
+        });
 
         // Test du token
         document.getElementById('test-token').addEventListener('click', function() {
@@ -198,18 +218,48 @@
         document.getElementById('test-login').addEventListener('click', function() {
             const username = document.getElementById('PLEX_USERNAME').value;
             const password = document.getElementById('PLEX_PASSWORD').value;
+            const mfaCode = document.getElementById('PLEX_MFA_CODE').value;
+            const button = this;
+            const previousLabel = button.textContent;
+            const resultDiv = document.getElementById('login-test-result');
+
+            button.disabled = true;
+            button.textContent = 'Connexion...';
+            resultDiv.textContent = 'Connexion à Plex...';
+            resultDiv.className = 'test-result is-visible';
+
             fetch('/test_login', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
                 },
-                body: new URLSearchParams({ PLEX_USERNAME: username, PLEX_PASSWORD: password }),
+                body: new URLSearchParams({
+                    PLEX_USERNAME: username,
+                    PLEX_PASSWORD: password,
+                    PLEX_MFA_CODE: mfaCode
+                }),
             })
             .then(response => response.json())
             .then(data => {
-                const resultDiv = document.getElementById('login-test-result');
+                if (data.status === 'success' && data.token) {
+                    tokenInput.value = data.token;
+                    tokenInput.type = 'password';
+                    mfaCodeInput.value = '';
+                    updateAuthenticationValidation();
+                }
+                if (data.needs_mfa) {
+                    mfaCodeInput.focus();
+                }
                 resultDiv.textContent = data.message;
                 resultDiv.className = data.status === 'success' ? 'test-result is-visible is-success' : 'test-result is-visible is-error';
+            })
+            .catch(error => {
+                resultDiv.textContent = error.message || 'Connexion Plex impossible.';
+                resultDiv.className = 'test-result is-visible is-error';
+            })
+            .finally(() => {
+                button.disabled = false;
+                button.textContent = previousLabel;
             });
         });
 
