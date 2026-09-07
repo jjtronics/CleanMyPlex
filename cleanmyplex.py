@@ -10,12 +10,16 @@ import sqlite3
 import threading
 import time
 from hmac import compare_digest
+from pathlib import Path
 from urllib.parse import urljoin
 from html import escape
 from uuid import uuid4
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'
+
+APP_DIR = Path(__file__).resolve().parent
+CONFIG_FILE = APP_DIR / 'config.json'
 
 # Charger la configuration depuis le fichier config.json
 def load_config():
@@ -28,15 +32,44 @@ def load_config():
         'MCP_API_KEY': ''
     }
 
-    config_paths = ['config.json', 'config.json.example']
+    # La configuration doit être liée à l'installation, pas au répertoire
+    # depuis lequel Python a été lancé. Le fallback vers config.json.example
+    # masquait les erreurs de déploiement et pouvait afficher une autre config.
+    config_paths = [CONFIG_FILE]
+    legacy_config_file = Path.cwd() / 'config.json'
+    if legacy_config_file != CONFIG_FILE:
+        config_paths.append(legacy_config_file)
+
     for config_path in config_paths:
-        if os.path.exists(config_path):
-            with open(config_path) as config_file:
-                loaded_config = json.load(config_file)
+        if config_path.exists():
+            try:
+                with config_path.open(encoding='utf-8') as config_file:
+                    loaded_config = json.load(config_file)
+            except (OSError, json.JSONDecodeError) as error:
+                app.logger.warning("Impossible de charger %s : %s", config_path, error)
+                continue
             default_config.update(loaded_config)
             return default_config
 
     return default_config
+
+
+def save_config():
+    """Enregistre la configuration dans un emplacement stable et atomique."""
+    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    temporary_file = CONFIG_FILE.with_name(f'.{CONFIG_FILE.name}.{os.getpid()}.tmp')
+    try:
+        with temporary_file.open('w', encoding='utf-8') as config_file:
+            json.dump(config, config_file, indent=4)
+            config_file.write('\n')
+        os.chmod(temporary_file, 0o600)
+        os.replace(temporary_file, CONFIG_FILE)
+        os.chmod(CONFIG_FILE, 0o600)
+    finally:
+        try:
+            temporary_file.unlink()
+        except FileNotFoundError:
+            pass
 
 config = load_config()
 
@@ -773,7 +806,10 @@ def connect_to_account(username='', password='', token='', code=''):
             return plex_account, None
         except Exception as e:
             app.logger.warning("Connexion au compte Plex par token impossible: %s", e)
-            return None, str(e)
+            if not username or not password:
+                return None, str(e)
+            # Un token peut expirer alors que les identifiants restent valides.
+            # Dans ce cas, on tente immédiatement l'authentification classique.
 
     if not username and not password:
         return None, None
@@ -809,13 +845,37 @@ def get_plex_token_from_credentials(username, password, code=''):
 
 
 def refresh_connections():
-    global plex, account
+    global plex, account, PLEX_TOKEN
 
     with connection_lock:
         connection_status['refreshing'] = True
 
     next_plex, plex_error = connect_to_plex(PLEX_URL, PLEX_TOKEN)
     next_account, account_error = connect_to_account(PLEX_USERNAME, PLEX_PASSWORD, PLEX_TOKEN)
+
+    # Renouvellement automatique du token si le token enregistré est expiré.
+    # Le MFA ne peut pas être automatisé ici : l'interface demandera alors un
+    # nouveau code ponctuel.
+    if (next_plex is None or next_account is None) and PLEX_USERNAME and PLEX_PASSWORD:
+        refreshed_token, token_error, needs_mfa = get_plex_token_from_credentials(
+            PLEX_USERNAME,
+            PLEX_PASSWORD,
+        )
+        if refreshed_token:
+            PLEX_TOKEN = refreshed_token
+            config['PLEX_TOKEN'] = refreshed_token
+            try:
+                save_config()
+            except OSError as error:
+                app.logger.error("Token renouvelé mais impossible de sauvegarder la config : %s", error)
+            next_plex, plex_error = connect_to_plex(PLEX_URL, refreshed_token)
+            next_account, account_error = connect_to_account(
+                PLEX_USERNAME,
+                PLEX_PASSWORD,
+                refreshed_token,
+            )
+        elif token_error and (account_error is None or needs_mfa):
+            account_error = token_error
 
     with connection_lock:
         plex = next_plex
@@ -1703,6 +1763,8 @@ def test_token():
 
 @app.route('/test_login', methods=['POST'])
 def test_login():
+    global PLEX_USERNAME, PLEX_PASSWORD, PLEX_TOKEN
+
     plex_username = request.form['PLEX_USERNAME']
     plex_password = request.form['PLEX_PASSWORD']
     plex_mfa_code = request.form.get('PLEX_MFA_CODE', '').strip().replace(' ', '')
@@ -1715,9 +1777,29 @@ def test_login():
             'message': 'Code MFA Plex requis.' if needs_mfa else f'Erreur : {error_message}'
         })
 
+    # Le bouton de connexion doit réellement persister les identifiants et le
+    # token. Avant cela, il ne faisait que remplir le champ HTML : un reload
+    # de la page effaçait tout.
+    PLEX_USERNAME = plex_username.strip()
+    PLEX_PASSWORD = plex_password
+    PLEX_TOKEN = token
+    config['PLEX_USERNAME'] = PLEX_USERNAME
+    config['PLEX_PASSWORD'] = PLEX_PASSWORD
+    config['PLEX_TOKEN'] = PLEX_TOKEN
+    try:
+        save_config()
+    except OSError as error:
+        app.logger.error("Impossible de sauvegarder les identifiants Plex : %s", error)
+        return jsonify({
+            'status': 'error',
+            'message': f'Connexion réussie, mais sauvegarde impossible : {error}'
+        }), 500
+
+    refresh_connections_async()
+
     return jsonify({
         'status': 'success',
-        'message': 'Connexion réussie. Token Plex récupéré et prêt à enregistrer.',
+        'message': 'Connexion réussie. Identifiants et token enregistrés.',
         'token': token,
     })
 
@@ -2750,8 +2832,12 @@ def settings():
         config['FRIEND_SERVER_NAME'] = friend_server_name
         config['MCP_API_KEY'] = mcp_api_key
 
-        with open('config.json', 'w') as config_file:
-            json.dump(config, config_file, indent=4)
+        try:
+            save_config()
+        except OSError as error:
+            app.logger.error("Impossible de sauvegarder la configuration : %s", error)
+            flash(f"Impossible d'enregistrer la configuration : {error}", 'danger')
+            return redirect(url_for('settings'))
 
         PLEX_URL = config['PLEX_URL']
         PLEX_TOKEN = config['PLEX_TOKEN']
