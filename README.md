@@ -109,6 +109,19 @@ curl -X POST http://127.0.0.1:5000/api/mcp/call \
 
 Outils disponibles : `cleanmyplex_status`, `list_libraries`, `list_datasets`, `query_dataset`, `set_dataset_actions`, `start_unwatched_scan`, `start_duplicate_scan`, `start_delete_marked_items`, `list_jobs`, `list_users`.
 
+## Dépannage Plex : erreur 500 pendant une suppression
+
+Si une suppression se termine avec une erreur Plex `500`, consultez d'abord le journal Plex Media Server. Une réponse `500` accompagnée de messages tels que `index corruption` ou `database disk image is malformed` indique une corruption de la base SQLite de Plex, et non un problème de sélection CleanMyPlex.
+
+Dans ce cas :
+
+1. Arrêtez les suppressions et les scans susceptibles de modifier la bibliothèque.
+2. Sauvegardez intégralement le répertoire de données Plex avant toute intervention.
+3. Réparez ou restaurez la base Plex conformément à la procédure Plex adaptée à votre système.
+4. Relancez un scan complet dans CleanMyPlex avant de préparer une nouvelle sélection.
+
+Ne relancez pas les suppressions en échec tant que l'intégrité de la base Plex n'a pas été rétablie : Plex peut supprimer une partie des métadonnées en mémoire puis échouer lors de l'écriture en base.
+
 ## Mise à jour
 
 Pour mettre à jour une installation existante de CleanMyPlex via git :
