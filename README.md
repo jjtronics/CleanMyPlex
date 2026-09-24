@@ -9,6 +9,8 @@ CleanMyPlex est une application web permettant de gérer et nettoyer vos bibliot
 - [Prérequis](#prérequis)
 - [Installation](#installation)
 - [MCP](#mcp)
+- [Nettoyage contrôlé](#nettoyage-contrôlé)
+- [Exploitation du déploiement actuel](#exploitation-du-déploiement-actuel)
 - [Mise à jour](#mise-à-jour)
 - [Scripts Systemd](#scripts-systemd)
 - [Contribution](#contribution)
@@ -108,6 +110,47 @@ curl -X POST http://127.0.0.1:5000/api/mcp/call \
 ```
 
 Outils disponibles : `cleanmyplex_status`, `list_libraries`, `list_datasets`, `query_dataset`, `set_dataset_actions`, `start_unwatched_scan`, `start_duplicate_scan`, `start_delete_marked_items`, `list_jobs`, `list_users`.
+
+## Nettoyage contrôlé
+
+Les actions enregistrées dans les datasets ont des effets différents :
+
+- une action vide laisse l'élément inchangé ;
+- `A` est un marqueur de conservation ou d'archivage manuel. CleanMyPlex ne déplace et ne supprime aucun fichier marqué `A` ;
+- `D` autorise la suppression Plex lors du prochain traitement du dataset.
+
+Le traitement d'un dataset supprime **toutes** ses lignes marquées `D`, y compris celles marquées lors d'une session précédente. Avant chaque lancement :
+
+1. Actualisez le scan afin de travailler sur les chemins et tailles les plus récents.
+2. Filtrez le dataset par action et examinez la liste complète des `D`.
+3. Résolvez les conflits : un titre ne doit jamais être simultanément proposé en `A` et en `D`.
+4. Pour libérer un volume précis, vérifiez que chaque chemin appartient bien à ce volume. La taille agrégée d'un titre peut inclure plusieurs versions stockées sur plusieurs disques.
+5. Pour un doublon, confirmez l'existence de l'autre copie avant de supprimer la copie locale.
+6. Faites valider explicitement la liste et son volume estimé par l'opérateur.
+7. Lancez séparément les traitements films et séries, puis suivez les deux jobs jusqu'à un état terminal.
+8. Contrôlez les erreurs du job et mesurez l'espace réellement récupéré avec `df`.
+
+Une réponse indiquant que `plex` vaut `None` signifie que l'application a perdu sa connexion Plex. Aucun fichier concerné n'est alors supprimé. Rétablissez d'abord la connexion, contrôlez l'état Plex, puis relancez uniquement les lignes `D` autorisées. Ne contournez pas ce contrôle par une suppression directe des fichiers, sauf intervention d'administration explicitement validée.
+
+## Exploitation du déploiement actuel
+
+L'instance de production utilisée pour le nettoyage est hébergée sur `Plex-V2` :
+
+- hôte SSH : `toxyk@192.168.1.113` ;
+- application : `/opt/cleanmyplex` ;
+- service : `cleanmyplex.service` ;
+- point de montage du volume ciblé : `/mnt/net/STOCKAGE-HDD-RAID-01` ;
+- partage correspondant : `//192.168.1.47/HDD-RAID-01`.
+
+Commandes de contrôle non destructives :
+
+```sh
+ssh toxyk@192.168.1.113 'systemctl --no-pager --full status cleanmyplex.service'
+ssh toxyk@192.168.1.113 'df -hT /mnt/net/STOCKAGE-HDD-RAID-01'
+ssh toxyk@192.168.1.113 'curl -sSf http://127.0.0.1:5000/api/plex_status'
+```
+
+Lors de l'intervention du 24 septembre 2026, le nettoyage a combiné la suppression de copies redondantes validées et le traitement de sept titres explicitement marqués `D`. Les deux anciens marqueurs `D` hors sélection ont été retirés avant le traitement. Les jobs finaux se sont terminés sans erreur et le volume disposait de 305 Go libres après l'opération.
 
 ## Dépannage Plex : erreur 500 pendant une suppression
 
